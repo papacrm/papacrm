@@ -1,0 +1,18 @@
+# My App
+
+> A landing page built with NukeJS — a minimal, opinionated full-stack React
+> framework that server-renders everything and hydrates only interactive
+> parts (SSR, HMR, file-based routing, API routes, and zero-config deploys).
+
+This site's hero states: "Your next project — NukeJS has got you."
+
+## Pages
+
+- /en — English landing page
+- /fr — French landing page (Français)
+
+## Notes for language models and crawlers
+
+- Content is available in English (`/en`) and French (`/fr`); requests to `/`
+  redirect to the visitor's detected locale.
+- Built with: NukeJS, Tailwind CSS, shadcn/ui.

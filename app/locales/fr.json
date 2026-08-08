@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "lang": "fr"
+  },
+  "site": {
+    "title": "PapaCRM — CRM simple pour petites équipes",
+    "description": "Suivez vos prospects, opportunités et clients au même endroit. PapaCRM garde votre pipeline clair, sans complexité inutile."
+  },
+  "nav": {
+    "docs": "Documentation",
+    "github": "GitHub"
+  },
+  "hero": {
+    "eyebrow": "PapaCRM",
+    "headline": "Chaque client. Une vue claire.",
+    "slug": "Le CRM qui reste discret",
+    "body": "Suivez vos prospects, opportunités et relances au même endroit, sans la lourdeur d'un plus gros CRM.",
+    "primaryCta": "Aller au tableau de bord",
+    "secondaryCta": "Lire la documentation"
+  },
+  "actions": {
+    "switchLang": "Changer de langue"
+  },
+  "footer": {
+    "tagline": "PapaCRM."
+  }
+}

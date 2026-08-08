@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "lang": "en"
+  },
+  "site": {
+    "name": "PapaCRM",
+    "title": "Open Source CRM",
+    "description": "A flexible, community-driven CRM platform designed for businesses that want control over their data, workflows, and future. Customize everything, automate anything, and grow without vendor lock-in."
+  },
+  "nav": {
+    "docs": "Docs",
+    "github": "GitHub"
+  },
+  "hero": {
+    "eyebrow": "Open source CRM",
+    "headline": "Own Your CRM",
+    "body": "A flexible, community-driven CRM platform designed for businesses that want control over their data, workflows, and future. Customize everything, automate anything, and grow without vendor lock-in.",
+    "primaryCta": "Go to dashboard",
+    "secondaryCta": "Read the docs"
+  },
+  "actions": {
+    "switchLang": "Switch language"
+  },
+  "footer": {
+    "tagline": "PapaCRM."
+  }
+}
