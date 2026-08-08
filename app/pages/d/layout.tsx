@@ -24,6 +24,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <Link href="/d/workflows" className="hover:text-neutral-900">
                             Workflows
                         </Link>
+                        <Link href="/d/lists" className="hover:text-neutral-900">
+                            Lists
+                        </Link>
                     </nav>
                 </div>
                 <LogoutButton />

@@ -3,7 +3,7 @@
 // — that's the only thing the editor needs to know about it. To add a new
 // step: create `mySte.ts` here, then register it in `index.ts`.
 
-export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm" | "saveRecord";
+export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm" | "saveRecord" | "saveToList" | "mapper";
 
 export interface WorkflowNode {
     id: string;
@@ -26,6 +26,10 @@ export interface WorkflowField {
     kind: "text" | "textarea" | "select";
     placeholder?: string;
     options?: { value: string; label: string }[];
+    // For "select" fields whose options can't be known statically (e.g.
+    // "pick one of your Lists") — the editor fetches the real options at
+    // render time and uses those instead of `options` above.
+    dynamicOptions?: "lists";
 }
 
 export interface InspectorNote {

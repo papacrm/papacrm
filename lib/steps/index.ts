@@ -6,6 +6,8 @@ import httpRequestStep from "./httpRequest";
 import conditionStep from "./condition";
 import staticPageStep from "./staticPage";
 import saveRecordStep from "./saveRecord";
+import saveToListStep from "./saveToList";
+import mapperStep from "./mapper";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -22,6 +24,8 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     condition: conditionStep,
     staticPage: staticPageStep,
     saveRecord: saveRecordStep,
+    saveToList: saveToListStep,
+    mapper: mapperStep,
 };
 
 export * from "./types";

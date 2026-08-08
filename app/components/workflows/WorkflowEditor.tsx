@@ -65,11 +65,27 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
     const [origin, setOrigin] = useState("");
+    const [lists, setLists] = useState<{ _id: string; name: string }[] | null>(null);
 
     nodesRef.current = nodes;
 
     useEffect(() => {
         setOrigin(window.location.origin);
+    }, []);
+
+    // Backs any field with `dynamicOptions: "lists"` (currently just Save
+    // to List's "List" picker). Fetched once up front rather than lazily
+    // per-node so switching between nodes doesn't re-fetch or flash empty.
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await withAuthRetry(() => orpc.list.list());
+                setLists((data as any[]).map((l) => ({ _id: l._id, name: l.name })));
+            } catch {
+                setLists([]);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Drag-to-move and drag-to-connect both live on window-level listeners
@@ -429,7 +445,22 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                             {NODE_DEFS[selectedNode.type].fields.map((field) => (
                                 <div key={field.key} className="flex flex-col gap-1.5">
                                     <Label htmlFor={field.key}>{field.label}</Label>
-                                    {field.kind === "select" ? (
+                                    {field.kind === "select" && field.dynamicOptions === "lists" ? (
+                                        <select
+                                            id={field.key}
+                                            value={selectedNode.data?.[field.key] ?? ""}
+                                            onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
+                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                            disabled={lists === null}
+                                        >
+                                            <option value="">{lists === null ? "Loading lists…" : lists.length === 0 ? "No lists yet" : "Select a list…"}</option>
+                                            {lists?.map((l) => (
+                                                <option key={l._id} value={l._id}>
+                                                    {l.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : field.kind === "select" ? (
                                         <select
                                             id={field.key}
                                             value={selectedNode.data?.[field.key] ?? ""}
