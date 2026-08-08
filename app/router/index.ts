@@ -1,5 +1,6 @@
 import { requestOtp, verifyOtp } from "./otp";
 import { refresh, logout, me } from "./session";
+import { list, get, create, update, remove } from "./workflows";
 
 export const router = {
     auth: {
@@ -8,6 +9,13 @@ export const router = {
         refresh,
         logout,
         me,
+    },
+    workflow: {
+        list,
+        get,
+        create,
+        update,
+        remove,
     },
 };
 
