@@ -1,10 +1,5 @@
 import type { IWorkflowNode } from "../models/Workflow";
-import { nextEdgeTarget, type StepContext, type StepExecutor } from "./types";
-
-function readPath(source: unknown, path: string): unknown {
-    if (!source || !path) return undefined;
-    return path.split(".").reduce<any>((acc, key) => (acc == null ? undefined : acc[key]), source);
-}
+import { nextEdgeTargets, readPath, type StepContext, type StepExecutor } from "./types";
 
 function evaluateCondition(node: IWorkflowNode, ctx: StepContext): boolean {
     const { field = "", operator = "equals", value = "" } = node.data ?? {};
@@ -26,7 +21,7 @@ function evaluateCondition(node: IWorkflowNode, ctx: StepContext): boolean {
 const conditionStep: StepExecutor = {
     run({ node, ctx, edges }) {
         const branch = evaluateCondition(node, ctx) ? "true" : "false";
-        return { done: false, nextNodeId: nextEdgeTarget(node, edges, branch) };
+        return { done: false, nextNodeIds: nextEdgeTargets(node, edges, branch) };
     },
 };
 

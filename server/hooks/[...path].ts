@@ -62,11 +62,13 @@ async function handle(req: ApiRequest, res: ApiResponse) {
         }
     }
 
-    const result = await runWorkflow(match.workflow.nodes as any, match.workflow.edges as any, match.nodeId, {
-        method,
-        query: req.query,
-        body,
-    });
+    const result = await runWorkflow(
+        match.workflow.nodes as any,
+        match.workflow.edges as any,
+        match.nodeId,
+        { method, query: req.query, body },
+        String(match.workflow._id),
+    );
 
     if (result.kind === "html") {
         res.statusCode = result.status;

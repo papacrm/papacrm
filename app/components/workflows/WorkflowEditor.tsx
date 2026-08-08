@@ -126,10 +126,17 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                     return x >= n.x - 14 && x <= n.x + NODE_WIDTH + 14 && y >= n.y - 14 && y <= n.y + NODE_HEIGHT + 14;
                 });
                 if (target) {
-                    setEdges((prev) => [
-                        ...prev.filter((edge) => !(edge.source === fromId && edge.sourceHandle === handle)),
-                        { id: newId("e"), source: fromId, sourceHandle: handle, target: target.id },
-                    ]);
+                    // A handle can fan out to more than one target now (e.g.
+                    // an Input Form step feeding both a "Save to Database"
+                    // step and a "Static Page" step in parallel) — so this
+                    // adds a new edge instead of replacing whatever the
+                    // handle was already connected to. Re-dragging onto the
+                    // same target is a no-op rather than a duplicate edge.
+                    setEdges((prev) => {
+                        const alreadyConnected = prev.some((edge) => edge.source === fromId && edge.sourceHandle === handle && edge.target === target.id);
+                        if (alreadyConnected) return prev;
+                        return [...prev, { id: newId("e"), source: fromId, sourceHandle: handle, target: target.id }];
+                    });
                     setDirty(true);
                 }
                 connectRef.current = null;
@@ -408,7 +415,10 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                 {/* Inspector */}
                 <div className="w-72 shrink-0 overflow-y-auto border-l border-neutral-200 p-4">
                     {!selectedNode ? (
-                        <p className="text-sm text-neutral-400">Select a step to edit it, or drag from the dot on its right edge to connect it to another step.</p>
+                        <p className="text-sm text-neutral-400">
+                            Select a step to edit it, or drag from the dot on its right edge to connect it to another step. Drag from the same dot again to
+                            fan out to a second step — both run in parallel.
+                        </p>
                     ) : (
                         <div className="flex flex-col gap-4">
                             <div>

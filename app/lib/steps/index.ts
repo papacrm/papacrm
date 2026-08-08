@@ -4,6 +4,7 @@ import inputFormStep from "./inputForm";
 import httpRequestStep from "./httpRequest";
 import conditionStep from "./condition";
 import staticPageStep from "./staticPage";
+import saveRecordStep from "./saveRecord";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -20,8 +21,9 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     httpRequest: httpRequestStep,
     condition: conditionStep,
     staticPage: staticPageStep,
+    saveRecord: saveRecordStep,
 };
 
-export const NODE_ORDER: WorkflowNodeType[] = ["webhook", "inputForm", "httpRequest", "condition", "staticPage"];
+export const NODE_ORDER: WorkflowNodeType[] = ["webhook", "inputForm", "httpRequest", "condition", "staticPage", "saveRecord"];
 
 export * from "./types";

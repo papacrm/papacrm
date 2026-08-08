@@ -3,7 +3,7 @@
 // — that's the only thing the editor needs to know about it. To add a new
 // step: create `mySte.ts` here, then register it in `index.ts`.
 
-export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm";
+export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm" | "saveRecord";
 
 export interface WorkflowNode {
     id: string;

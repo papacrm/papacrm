@@ -19,15 +19,27 @@ export type WorkflowResult =
 
 export interface StepContext {
     query: Record<string, string>;
+    // Shared, mutable "current data" for the run — trigger steps (webhook,
+    // inputForm) set this to whatever was submitted; every step downstream
+    // (including parallel branches) sees the same object, so a step like
+    // Static Page can read a value a person typed into an earlier Input
+    // Form step. See `renderTemplate` below for the `{{ field }}` syntax
+    // steps use to pull values out of it.
     body: any;
+    // id of the workflow currently running — steps that persist data (e.g.
+    // Save to Database) need this to know which workflow a record belongs to.
+    workflowId: string;
 }
 
 export type StepOutcome =
-    // Ends the run and sends `result` back as the HTTP response.
+    // Ends this branch and sends `result` back as the HTTP response — only
+    // wins if no *other* branch of a fan-out also finishes with a result
+    // (see runWorkflow in ../workflowEngine.ts for how that's resolved).
     | { done: true; result: WorkflowResult }
-    // Moves on to `nextNodeId` (or ends with an empty 204 if undefined —
-    // e.g. an output handle with nothing wired to it).
-    | { done: false; nextNodeId?: string };
+    // Moves on to every node in `nextNodeIds`, run concurrently. An empty
+    // array (e.g. an output handle with nothing wired to it) ends this
+    // branch with no result.
+    | { done: false; nextNodeIds: string[] };
 
 export interface StepExecutor {
     run(args: { node: IWorkflowNode; ctx: StepContext; trigger: WebhookTrigger; edges: IWorkflowEdge[] }): Promise<StepOutcome> | StepOutcome;
@@ -47,8 +59,26 @@ export function matchesPath(node: IWorkflowNode, path: string): boolean {
     return String(node.data?.path ?? "").replace(/^\/+|\/+$/g, "") === cleanPath;
 }
 
-// Follows the single outgoing edge from `node`. Pass `sourceHandle` for
-// branch-style steps (e.g. "true"/"false"); omit it for single-output steps.
-export function nextEdgeTarget(node: IWorkflowNode, edges: IWorkflowEdge[], sourceHandle?: string): string | undefined {
-    return edges.find((e) => e.source === node.id && (sourceHandle === undefined || e.sourceHandle === sourceHandle))?.target;
+// Follows every outgoing edge from `node` (a node can now fan out to more
+// than one next step — e.g. one branch saves to the database while another
+// renders the response page). Pass `sourceHandle` for branch-style steps
+// (e.g. "true"/"false"); omit it for single-handle steps.
+export function nextEdgeTargets(node: IWorkflowNode, edges: IWorkflowEdge[], sourceHandle?: string): string[] {
+    return edges.filter((e) => e.source === node.id && (sourceHandle === undefined || e.sourceHandle === sourceHandle)).map((e) => e.target);
+}
+
+export function readPath(source: unknown, path: string): unknown {
+    if (!source || !path) return undefined;
+    return path.split(".").reduce<any>((acc, key) => (acc == null ? undefined : acc[key]), source);
+}
+
+// Replaces every `{{ some.path }}` in `template` with the matching value
+// read from the step context — checks the current body first (e.g. a
+// submitted form field), then the query string. Used by steps like Static
+// Page and HTTP Request so they can use data an earlier step collected.
+export function renderTemplate(template: string, ctx: StepContext): string {
+    return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path) => {
+        const value = readPath(ctx.body, path) ?? readPath(ctx.query, path);
+        return value === undefined || value === null ? "" : String(value);
+    });
 }

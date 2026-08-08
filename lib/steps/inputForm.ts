@@ -1,5 +1,5 @@
 import type { IWorkflowNode } from "../models/Workflow";
-import { matchesPath, nextEdgeTarget, type StepExecutor } from "./types";
+import { matchesPath, nextEdgeTargets, type StepExecutor } from "./types";
 
 function escapeHtml(s: string): string {
     return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -48,7 +48,7 @@ const inputFormStep: StepExecutor = {
         // submitted fields into the context body and carry on down the
         // chain, same as a webhook trigger firing.
         ctx.body = trigger.body ?? ctx.body;
-        return { done: false, nextNodeId: nextEdgeTarget(node, edges) };
+        return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
     },
     // Responds to any method on its path — GET renders the form, everything
     // else is a submission (see run() above).

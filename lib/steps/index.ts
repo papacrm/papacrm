@@ -5,6 +5,7 @@ import inputFormStep from "./inputForm";
 import httpRequestStep from "./httpRequest";
 import conditionStep from "./condition";
 import staticPageStep from "./staticPage";
+import saveRecordStep from "./saveRecord";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -20,6 +21,7 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     httpRequest: httpRequestStep,
     condition: conditionStep,
     staticPage: staticPageStep,
+    saveRecord: saveRecordStep,
 };
 
 export * from "./types";

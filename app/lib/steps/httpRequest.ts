@@ -20,7 +20,12 @@ const httpRequestStep: WorkflowNodeDef = {
             ],
         },
         { key: "headers", label: "Headers (JSON)", kind: "textarea", placeholder: '{"Authorization": "Bearer ..."}' },
-        { key: "body", label: "Body", kind: "textarea", placeholder: '{"key": "value"}' },
+        {
+            key: "body",
+            label: "Body — use {{field}} for data from an earlier step",
+            kind: "textarea",
+            placeholder: '{"email": "{{email}}"}',
+        },
     ],
     defaultData: () => ({ url: "", method: "GET", headers: "", body: "" }),
     summarize: (data) => `${data?.method ?? "GET"} ${data?.url || "no URL set"}`,
