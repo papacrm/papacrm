@@ -5,8 +5,10 @@ import { MAX_STEPS, type StepContext, type WebhookTrigger, type WorkflowResult }
 export type { WebhookTrigger, WorkflowResult };
 
 // Finds the trigger node (if any) that should handle an incoming request to
-// /hooks/<path>. Delegates to each node type's own `matchesTrigger` — this
-// function doesn't know (or need to know) which types are trigger-capable.
+// /<path> (see middleware.ts, which resolves it before the page router
+// ever sees the request). Delegates to each node type's own
+// `matchesTrigger` — this function doesn't know (or need to know) which
+// types are trigger-capable.
 export function findWebhookNode(nodes: IWorkflowNode[], path: string, method: string): IWorkflowNode | undefined {
     return nodes.find((n) => STEP_EXECUTORS[n.type]?.matchesTrigger?.(n, path, method));
 }

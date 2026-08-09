@@ -67,14 +67,14 @@ export function randomSlug(): string {
     return Math.random().toString(36).slice(2, 8);
 }
 
-// Shared by any step that's addressable at /hooks/<path> (webhook,
-// inputForm, ...) — shows the public URL in the inspector once the editor
-// has mounted, plus a nudge to activate the workflow.
+// Shared by any step that's addressable at /<path> (webhook, inputForm,
+// ...) — shows the public URL in the inspector once the editor has
+// mounted, plus a nudge to activate the workflow.
 export function publicHookNote(data: Record<string, any>, ctx: InspectorNoteContext): InspectorNote | null {
     if (!ctx.origin) return null;
     return {
         label: "Public URL",
-        value: `${ctx.origin}/hooks/${data?.path || ""}`,
+        value: `${ctx.origin}/${data?.path || ""}`,
         warning: ctx.active ? undefined : "Save and mark this workflow Active for the URL to respond.",
     };
 }

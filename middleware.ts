@@ -1,6 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { readCookies, REFRESH_COOKIE_NAME } from "./lib/cookies";
 import { verifyRefreshToken } from "./lib/jwt";
+import { connectDB } from "./lib/mongoose";
+import Workflow from "./lib/models/Workflow";
+import { findWebhookNode, runWorkflow } from "./lib/workflowEngine";
 
 // The default locale is served unprefixed at "/" (e.g. "/", "/about").
 // Any other supported locale keeps its prefix (e.g. "/fr", "/fr/about").
@@ -9,6 +12,118 @@ const DEFAULT_LOCALE = "en";
 // Locales that keep a URL prefix. Must stay in sync with the `translations`
 // keys in app/lib/useI18n.ts (everything except DEFAULT_LOCALE).
 const PREFIXED_LOCALES = ["fr"];
+
+// ─── Workflow webhooks (served at the root, e.g. "/my-endpoint") ────────
+//
+// Workflows used to be served under a dedicated "/hooks" prefix via
+// server/hooks/[...path].ts. They now live at the root of the app instead,
+// so a webhook node configured with path "orders/new" responds at
+// "/orders/new" rather than "/hooks/orders/new".
+//
+// NukeJS's file-based server router gives *any* route under server/ (an
+// index.ts included) priority over the page router — an unprefixed
+// catch-all route file there would intercept every request, including real
+// pages like "/login" or "/d", before the page renderer ever saw them.
+// That's not workable for something as free-form as a user-defined webhook
+// path. Doing the lookup here instead, ahead of routing, avoids that: real
+// pages are excluded up front (see RESERVED_SLUGS below) and everything
+// else only reaches the workflow engine if an active workflow is actually
+// listening on it — otherwise it falls through to normal routing exactly
+// as before.
+//
+// Top-level path segments that belong to a real page and must never be
+// shadowed by a workflow's webhook path.
+const RESERVED_SLUGS = new Set(["d", "login", ...PREFIXED_LOCALES]);
+
+function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks)));
+        req.on("error", reject);
+    });
+}
+
+function sendJson(res: ServerResponse, data: unknown, status: number) {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(data));
+}
+
+// Looks for an active workflow whose webhook (or Input Form) trigger is
+// listening on `pathname`/`method`, and if one exists, runs it and writes
+// the response. Returns true if it handled the request, false if the
+// caller should fall through to normal page routing.
+async function tryHandleWebhook(
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    query: Record<string, string>,
+): Promise<boolean> {
+    const path = pathname.replace(/^\/+/, "");
+    const method = (req.method || "GET").toUpperCase();
+
+    await connectDB();
+
+    // Webhook paths aren't uniquely indexed (a user could reuse a slug
+    // across a couple of draft workflows before activating one), so this
+    // scans active workflows and takes the first path+method match — fine
+    // at this project's scale.
+    const workflows = await Workflow.find({ active: true }).lean();
+
+    let match: { workflow: (typeof workflows)[number]; nodeId: string } | undefined;
+    for (const workflow of workflows) {
+        const node = findWebhookNode(workflow.nodes as any, path, method);
+        if (node) {
+            match = { workflow, nodeId: node.id };
+            break;
+        }
+    }
+
+    if (!match) return false;
+
+    let body: unknown = null;
+    if (method !== "GET" && method !== "HEAD") {
+        const contentType = String(req.headers["content-type"] ?? "");
+        try {
+            const raw = (await readRequestBody(req)).toString("utf8");
+            if (contentType.includes("application/json")) {
+                body = raw ? JSON.parse(raw) : null;
+            } else if (contentType.includes("application/x-www-form-urlencoded")) {
+                // Submissions from an Input Form step arrive this way.
+                body = Object.fromEntries(new URLSearchParams(raw));
+            } else {
+                body = raw;
+            }
+        } catch {
+            body = null;
+        }
+    }
+
+    const result = await runWorkflow(
+        match.workflow.nodes as any,
+        match.workflow.edges as any,
+        match.nodeId,
+        { method, query, body },
+        String(match.workflow._id),
+    );
+
+    if (result.kind === "html") {
+        res.statusCode = result.status;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.end(result.html);
+        return true;
+    }
+
+    if (result.kind === "json") {
+        sendJson(res, result.data, result.status);
+        return true;
+    }
+
+    res.statusCode = result.status;
+    res.end();
+    return true;
+}
 
 // ─── Dev-only Tailwind watcher ──────────────────────────────────────────
 //
@@ -68,6 +183,19 @@ export default async function middleware(
         /\.[a-zA-Z0-9]+$/.test(pathname)
     ) {
         return;
+    }
+
+    // A workflow webhook takes priority over everything below — but never
+    // over a real page, so reserved top-level slugs ("/d", "/login", "/fr")
+    // are excluded before we even hit the database. The homepage ("/") is
+    // NOT excluded: an active workflow can claim it (e.g. path set to
+    // empty/"/"), and if none does, the lookup just returns no match and
+    // falls through to the static homepage exactly as before.
+    const firstSegment = pathname.split("/").filter(Boolean)[0];
+    if (!RESERVED_SLUGS.has(firstSegment)) {
+        const query = Object.fromEntries(new URL(rawUrl, "http://localhost").searchParams);
+        const handled = await tryHandleWebhook(req, res, pathname, query);
+        if (handled) return;
     }
 
     // Canonicalize the default locale: `/en` and `/en/...` permanently

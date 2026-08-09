@@ -43,9 +43,9 @@ export type StepOutcome =
 
 export interface StepExecutor {
     run(args: { node: IWorkflowNode; ctx: StepContext; trigger: WebhookTrigger; edges: IWorkflowEdge[] }): Promise<StepOutcome> | StepOutcome;
-    // Only needed by steps reachable at /hooks/<path> (webhook, inputForm,
-    // ...). Decides whether this node should handle an incoming request to
-    // that path/method. Steps that are never a workflow's entry point (like
+    // Only needed by steps reachable at /<path> (webhook, inputForm, ...).
+    // Decides whether this node should handle an incoming request to that
+    // path/method. Steps that are never a workflow's entry point (like
     // condition or httpRequest) omit this.
     matchesTrigger?(node: IWorkflowNode, path: string, method: string): boolean;
 }

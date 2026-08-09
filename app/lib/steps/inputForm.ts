@@ -23,7 +23,7 @@ const inputFormStep: WorkflowNodeDef = {
         fields: JSON.stringify([{ name: "email", label: "Email", type: "email" }], null, 2),
         submitLabel: "Submit",
     }),
-    summarize: (data) => `Form at /hooks/${data?.path || "…"}`,
+    summarize: (data) => `Form at /${data?.path || "…"}`,
     inspectorNote: publicHookNote,
 };
 
