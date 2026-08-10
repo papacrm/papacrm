@@ -12,8 +12,25 @@ export interface WebhookTrigger {
     body: unknown;
 }
 
+// A step that wants to render a page hands back a *description* of that
+// page — which React component to use (looked up in
+// app/components/webhooks/registry.tsx) and the props it needs — rather
+// than a pre-rendered HTML string. The endpoint (server/hooks/[...path].ts,
+// middleware.ts) is what actually turns this into HTML, via NukeJS's
+// `renderComponent()`. That keeps step executors framework-agnostic (no
+// React, no SSR calls in here) while still getting real NukeJS SSR —
+// `useHtml()`, layouts, etc. — for every workflow-rendered page, plus
+// automatic escaping (no more hand-rolled `escapeHtml`).
+export type WorkflowPageComponent = "staticPage" | "inputForm";
+
+export interface WorkflowPage {
+    title: string;
+    component: WorkflowPageComponent;
+    props: Record<string, unknown>;
+}
+
 export type WorkflowResult =
-    | { kind: "html"; status: number; html: string }
+    | { kind: "page"; status: number; page: WorkflowPage }
     | { kind: "json"; status: number; data: unknown }
     | { kind: "empty"; status: number };
 

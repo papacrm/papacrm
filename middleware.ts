@@ -1,9 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "http";
+import { renderComponent } from "nukejs/server";
 import { readCookies, REFRESH_COOKIE_NAME } from "./lib/cookies";
 import { verifyRefreshToken } from "./lib/jwt";
 import { connectDB } from "./lib/mongoose";
 import Workflow from "./lib/models/Workflow";
 import { findWebhookNode, runWorkflow } from "./lib/workflowEngine";
+import { WEBHOOK_PAGE_COMPONENTS } from "./app/components/webhooks/registry";
+import RootLayout from "./app/pages/layout";
 
 // The default locale is served unprefixed at "/" (e.g. "/", "/about").
 // Any other supported locale keeps its prefix (e.g. "/fr", "/fr/about").
@@ -108,10 +111,21 @@ async function tryHandleWebhook(
         String(match.workflow._id),
     );
 
-    if (result.kind === "html") {
+    if (result.kind === "page") {
+        // Real NukeJS SSR instead of a hand-built HTML string: the page
+        // gets the app's shared RootLayout (stylesheet, favicon, title
+        // template) and whatever reactivity the component itself wires up
+        // via useHtml() (see app/components/webhooks/WebhookInputForm.tsx).
+        const Component = WEBHOOK_PAGE_COMPONENTS[result.page.component];
+        const html = await renderComponent(Component, result.page.props, {
+            layouts: [RootLayout],
+            url: req.url,
+            query,
+            title: result.page.title,
+        });
         res.statusCode = result.status;
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.end(result.html);
+        res.end(html);
         return true;
     }
 
