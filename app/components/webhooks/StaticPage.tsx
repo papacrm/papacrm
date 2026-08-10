@@ -21,7 +21,7 @@ export default function StaticPage({ title, html }: StaticPageProps) {
     useHtml({ title });
 
     return (
-        <main className="mx-auto max-w-2xl px-6 py-12">
+        <main data-webhook-page className="mx-auto max-w-2xl px-6 py-12">
             <div dangerouslySetInnerHTML={{ __html: html }} />
         </main>
     );

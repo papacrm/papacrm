@@ -12,7 +12,7 @@ export default function InputFormPage({ title, submitLabel, fields }: InputFormP
     useHtml({ title });
 
     return (
-        <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
+        <main data-webhook-page className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
             <h1 className="text-2xl font-semibold">{title}</h1>
             <WebhookInputForm fields={fields} submitLabel={submitLabel} />
         </main>
