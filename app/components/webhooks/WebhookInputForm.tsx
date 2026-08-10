@@ -2,14 +2,14 @@ import { useHtml } from "nukejs";
 import type { InputFormField } from "../../../lib/steps/inputForm";
 
 interface WebhookInputFormProps {
-    fields: InputFormField[];
-    submitLabel: string;
-    // This node's own webhook path — used as the form's explicit `action`
-    // so it always submits to (and can navigate to) the right endpoint,
-    // even after being swapped into a page that's showing a different
-    // node's URL in the address bar (see the isEntry/chaining note in
-    // lib/steps/inputForm.ts).
-    path: string;
+  fields: InputFormField[];
+  submitLabel: string;
+  // This node's own id, submitted back in a hidden field (see the
+  // render below) so the engine can tell this specific form's
+  // submission apart from any other Input Form's — every step in a
+  // Webhook → Input Form → Input Form chain shares one URL. See
+  // runWorkflow in ../../../lib/workflowEngine.ts.
+  stepId: string;
 }
 
 // NOTE on why this isn't a `"use client"` component, and how the
@@ -39,12 +39,12 @@ interface WebhookInputFormProps {
 // unavailable, or the fetch fails, the form still works: it's a real
 // `<form method="POST">` and falls back to a normal (full-reload)
 // submission.
-export default function WebhookInputForm({ fields, submitLabel, path }: WebhookInputFormProps) {
-    useHtml({
-        script: [
-            {
-                position: "body",
-                content: `
+export default function WebhookInputForm({ fields, submitLabel, stepId }: WebhookInputFormProps) {
+  useHtml({
+    script: [
+      {
+        position: "body",
+        content: `
 (function () {
   // The script is injected at the end of <body> (position: "body"), not
   // necessarily right next to the form, so it's found by a data attribute
@@ -92,18 +92,12 @@ export default function WebhookInputForm({ fields, submitLabel, path }: WebhookI
     document.title = nextDoc.title;
     currentRoot.replaceWith(nextRoot);
 
-    // If the next step is itself independently addressable (e.g. another
-    // Input Form step — see the data-path attribute set in
-    // InputFormPage.tsx), reflect its real URL in the address bar. Without
-    // this, the browser would keep showing the previous step's URL even
-    // though a different form (with its own explicit action, see the path
-    // prop above) is now on screen — confusing for back/refresh/bookmarking,
-    // though submission itself is still correct either way because of that
-    // explicit action. Steps with no address of their own (e.g. a terminal
-    // Static Page) simply don't set data-path, so the URL is left as-is.
-    if (nextRoot.dataset.path) {
-      window.history.pushState(null, "", "/" + nextRoot.dataset.path);
-    }
+    // No step (Input Form or Static Page) has an address of its own
+    // anymore — every one of them is only ever reached by following an
+    // edge from a Webhook — so the URL in the address bar is left as-is;
+    // it's still the Webhook's URL, and that's exactly where this form's
+    // own submission (see the plain form element below, no explicit
+    // action) will go too.
 
     // If the next step is itself reactive (e.g. another Input Form step),
     // its <script> — injected via that page's own useHtml({ script }) call
@@ -171,36 +165,37 @@ export default function WebhookInputForm({ fields, submitLabel, path }: WebhookI
   });
 })();
 `,
-            },
-        ],
-    });
+      },
+    ],
+  });
 
-    return (
-        <form method="POST" action={`/${path}`} data-webhook-form className="flex flex-col gap-4" noValidate>
-            <div data-form-error className="text-sm text-red-600" role="alert" />
-            {fields.map((field) => (
-                <div key={field.name} className="flex flex-col gap-1.5">
-                    <label htmlFor={`field-${field.name}`} className="text-sm font-medium">
-                        {field.label ?? field.name}
-                        {field.required && <span className="text-red-600"> *</span>}
-                    </label>
-                    <input
-                        id={`field-${field.name}`}
-                        name={field.name}
-                        type={field.type ?? "text"}
-                        required={field.required}
-                        className="h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-                    />
-                    <p data-error-for={field.name} className="text-xs text-red-600" />
-                </div>
-            ))}
-            <button
-                type="submit"
-                data-submit
-                className="mt-2 inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:pointer-events-none disabled:opacity-50"
-            >
-                {submitLabel}
-            </button>
-        </form>
-    );
+  return (
+    <form method="POST" data-webhook-form className="flex flex-col gap-4" noValidate>
+      <input type="hidden" name="__step" value={stepId} />
+      <div data-form-error className="text-sm text-red-600" role="alert" />
+      {fields.map((field) => (
+        <div key={field.name} className="flex flex-col gap-1.5">
+          <label htmlFor={`field-${field.name}`} className="text-sm font-medium">
+            {field.label ?? field.name}
+            {field.required && <span className="text-red-600"> *</span>}
+          </label>
+          <input
+            id={`field-${field.name}`}
+            name={field.name}
+            type={field.type ?? "text"}
+            required={field.required}
+            className="h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+          />
+          <p data-error-for={field.name} className="text-xs text-red-600" />
+        </div>
+      ))}
+      <button
+        type="submit"
+        data-submit
+        className="mt-2 inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:pointer-events-none disabled:opacity-50"
+      >
+        {submitLabel}
+      </button>
+    </form>
+  );
 }

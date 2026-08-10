@@ -18,8 +18,8 @@ const webhookStep: WorkflowNodeDef = {
             ],
         },
     ],
-    defaultData: () => ({ path: randomSlug(), method: "POST" }),
-    summarize: (data) => `${data?.method ?? "POST"} /${data?.path || "…"}`,
+    defaultData: () => ({ path: randomSlug(), method: "GET" }),
+    summarize: (data) => `${data?.method ?? "GET"} /${data?.path || "…"}`,
     inspectorNote: publicHookNote,
 };
 

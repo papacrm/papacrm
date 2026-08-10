@@ -29,6 +29,22 @@ export async function runWorkflow(
     const ctx: StepContext = { query: trigger.query, body: trigger.body, workflowId };
     let stepsRun = 0;
 
+    // A form submission (see lib/steps/inputForm.ts / WebhookInputForm.tsx)
+    // carries a hidden `__step` field naming the exact Input Form node it
+    // was rendered by. Input Form has no path of its own — every step in a
+    // Webhook → Input Form → Input Form → ... chain is reached at the same
+    // URL — so `__step` is what lets a request resume the run at the right
+    // node instead of always restarting from the webhook (which would
+    // otherwise re-trigger the *first* form in the chain on every
+    // submission, no matter which form was actually on screen). A plain GET
+    // (rendering a page, not submitting one) has no `__step` and always
+    // starts at `startNodeId` as normal.
+    const targetStepId =
+        trigger.method.toUpperCase() !== "GET" && typeof (trigger.body as any)?.__step === "string"
+            ? ((trigger.body as any).__step as string)
+            : undefined;
+    const actualStartNodeId = targetStepId && nodeById.has(targetStepId) ? targetStepId : startNodeId;
+
     // A node can fan out to more than one next node (e.g. one branch saves
     // to the database while a parallel branch renders the response page).
     // Each branch is walked independently and recursively; branches run
@@ -56,6 +72,6 @@ export async function runWorkflow(
         return branchResults.find((r) => r && r.kind !== "empty") ?? branchResults.find((r) => r !== undefined);
     }
 
-    const result = await runFrom(startNodeId, true);
+    const result = await runFrom(actualStartNodeId, true);
     return result ?? { kind: "empty", status: 204 };
 }

@@ -1,22 +1,20 @@
-import { randomSlug, publicHookNote, type WorkflowNodeDef } from "./types";
+import type { WorkflowNodeDef } from "./types";
 
 const inputFormStep: WorkflowNodeDef = {
     type: "inputForm",
     label: "Input Form",
-    description: "Shows a form; the workflow continues when it's submitted. Can be the workflow's entry point, or reached from an earlier step (e.g. another Input Form).",
+    description: "Shows a form; the workflow continues when it's submitted. Has no address of its own — reach it by wiring a Webhook (or another step) into it. That earlier step's URL is what serves the form.",
     color: "#0891b2",
-    // Unlike Webhook, Input Form isn't trigger-only: a workflow can also
-    // wire another step's output into it (Input Form → Input Form, or
-    // webhook → Input Form) to chain forms together — the person just sees
-    // this step's form next. `kind: "action"` is what gives it both an
-    // input handle (so it can be a connection target) and an output handle
-    // in the editor; it's still independently reachable at its own /<path>
-    // via the server's matchesTrigger check either way. See the isEntry
-    // note in lib/steps/inputForm.ts for how the engine tells "this is the
-    // request's own entry" apart from "this was reached mid-chain."
+    // A workflow can wire another step's output into Input Form (Webhook →
+    // Input Form, or Input Form → Input Form) to chain forms together — the
+    // person just sees this step's form next. `kind: "action"` is what
+    // gives it both an input handle (so it can be a connection target) and
+    // an output handle in the editor. Unlike Webhook, it has no path of its
+    // own and can't be a workflow's entry point — see lib/steps/inputForm.ts
+    // for how the engine tells "render this form" apart from "this request
+    // is this form's submission."
     kind: "action",
     fields: [
-        { key: "path", label: "Path", kind: "text", placeholder: "signup" },
         { key: "title", label: "Form title", kind: "text", placeholder: "Tell us about yourself" },
         {
             key: "fields",
@@ -27,13 +25,11 @@ const inputFormStep: WorkflowNodeDef = {
         { key: "submitLabel", label: "Submit button label", kind: "text", placeholder: "Submit" },
     ],
     defaultData: () => ({
-        path: randomSlug(),
         title: "Tell us about yourself",
         fields: JSON.stringify([{ name: "email", label: "Email", type: "email" }], null, 2),
         submitLabel: "Submit",
     }),
-    summarize: (data) => `Form at /${data?.path || "…"}`,
-    inspectorNote: publicHookNote,
+    summarize: (data) => `Form: ${data?.title || "Untitled"}`,
 };
 
 export default inputFormStep;
