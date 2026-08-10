@@ -4,6 +4,12 @@ import type { InputFormField } from "../../../lib/steps/inputForm";
 interface WebhookInputFormProps {
     fields: InputFormField[];
     submitLabel: string;
+    // This node's own webhook path — used as the form's explicit `action`
+    // so it always submits to (and can navigate to) the right endpoint,
+    // even after being swapped into a page that's showing a different
+    // node's URL in the address bar (see the isEntry/chaining note in
+    // lib/steps/inputForm.ts).
+    path: string;
 }
 
 // NOTE on why this isn't a `"use client"` component, and how the
@@ -33,7 +39,7 @@ interface WebhookInputFormProps {
 // unavailable, or the fetch fails, the form still works: it's a real
 // `<form method="POST">` and falls back to a normal (full-reload)
 // submission.
-export default function WebhookInputForm({ fields, submitLabel }: WebhookInputFormProps) {
+export default function WebhookInputForm({ fields, submitLabel, path }: WebhookInputFormProps) {
     useHtml({
         script: [
             {
@@ -75,7 +81,7 @@ export default function WebhookInputForm({ fields, submitLabel }: WebhookInputFo
   // Swaps in the next step's page — parsed from a full renderComponent()
   // HTML response — without a full browser navigation. Mirrors what
   // NukeJS's own client-side router does for <Link>/useRouter navigations
-  // (title + content swap, no reload), just done by hand since that
+  // (title + content + URL swap, no reload), just done by hand since that
   // machinery isn't wired up outside the page router.
   function swapInPage(html) {
     var nextDoc = new DOMParser().parseFromString(html, "text/html");
@@ -85,6 +91,19 @@ export default function WebhookInputForm({ fields, submitLabel }: WebhookInputFo
 
     document.title = nextDoc.title;
     currentRoot.replaceWith(nextRoot);
+
+    // If the next step is itself independently addressable (e.g. another
+    // Input Form step — see the data-path attribute set in
+    // InputFormPage.tsx), reflect its real URL in the address bar. Without
+    // this, the browser would keep showing the previous step's URL even
+    // though a different form (with its own explicit action, see the path
+    // prop above) is now on screen — confusing for back/refresh/bookmarking,
+    // though submission itself is still correct either way because of that
+    // explicit action. Steps with no address of their own (e.g. a terminal
+    // Static Page) simply don't set data-path, so the URL is left as-is.
+    if (nextRoot.dataset.path) {
+      window.history.pushState(null, "", "/" + nextRoot.dataset.path);
+    }
 
     // If the next step is itself reactive (e.g. another Input Form step),
     // its <script> — injected via that page's own useHtml({ script }) call
@@ -157,7 +176,7 @@ export default function WebhookInputForm({ fields, submitLabel }: WebhookInputFo
     });
 
     return (
-        <form method="POST" data-webhook-form className="flex flex-col gap-4" noValidate>
+        <form method="POST" action={`/${path}`} data-webhook-form className="flex flex-col gap-4" noValidate>
             <div data-form-error className="text-sm text-red-600" role="alert" />
             {fields.map((field) => (
                 <div key={field.name} className="flex flex-col gap-1.5">

@@ -35,7 +35,7 @@ export async function runWorkflow(
     // concurrently via Promise.all. Only one HTTP response can ever be
     // sent, so once every branch has finished, the first one that actually
     // produced a result (not just a side effect) wins.
-    async function runFrom(nodeId: string): Promise<WorkflowResult | undefined> {
+    async function runFrom(nodeId: string, isEntry: boolean): Promise<WorkflowResult | undefined> {
         if (stepsRun >= MAX_STEPS) return undefined; // guards against cycles
         stepsRun++;
 
@@ -45,13 +45,17 @@ export async function runWorkflow(
         const executor = STEP_EXECUTORS[node.type];
         if (!executor) return undefined;
 
-        const outcome = await executor.run({ node, ctx, trigger, edges });
+        const outcome = await executor.run({ node, ctx, trigger, edges, isEntry });
         if (outcome.done) return outcome.result;
 
-        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id)));
+        // Every node reached from here on is a *chained* step, not the
+        // request's own entry point — see StepExecutor.run's `isEntry` doc
+        // in ./steps/types.ts for why that distinction matters (Input Form
+        // chaining depends on it).
+        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false)));
         return branchResults.find((r) => r && r.kind !== "empty") ?? branchResults.find((r) => r !== undefined);
     }
 
-    const result = await runFrom(startNodeId);
+    const result = await runFrom(startNodeId, true);
     return result ?? { kind: "empty", status: 204 };
 }

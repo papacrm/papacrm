@@ -20,8 +20,20 @@ function parseFields(node: IWorkflowNode): InputFormField[] {
 }
 
 const inputFormStep: StepExecutor = {
-    run({ node, ctx, trigger, edges }) {
-        if (trigger.method.toUpperCase() === "GET") {
+    run({ node, ctx, trigger, edges, isEntry }) {
+        // Only a direct request to *this* node's own path+method is a
+        // submission of *this* form. Every other way of reaching this node
+        // — the actual entry request being a GET, or this node being
+        // reached mid-chain from a previous step (another Input Form's
+        // submission, a webhook, ...) — means the person needs to see this
+        // step's own form next, not have it silently skipped.
+        //
+        // This is what makes Input Form → Input Form (→ anything) chains
+        // work: submitting form A lands on form B's *render*, not form B's
+        // *submit* handler, even though the whole run started from a POST.
+        const isSubmission = isEntry && trigger.method.toUpperCase() !== "GET";
+
+        if (!isSubmission) {
             const title = String(node.data?.title ?? "Form");
             return {
                 done: true,
@@ -39,14 +51,24 @@ const inputFormStep: StepExecutor = {
                             title,
                             submitLabel: String(node.data?.submitLabel ?? "Submit"),
                             fields: parseFields(node),
+                            // This node's own webhook path — not necessarily
+                            // the path the current request came in on. When
+                            // this form is reached mid-chain (see isEntry
+                            // above) it's swapped into a page that's still
+                            // showing a *different* node's URL in the address
+                            // bar, so the form needs to know explicitly where
+                            // it lives in order to submit to (and let the
+                            // browser navigate to) the right place. See
+                            // WebhookInputForm.tsx.
+                            path: String(node.data?.path ?? "").replace(/^\/+/, ""),
                         },
                     },
                 },
             };
         }
-        // Any non-GET hit is treated as the form submission: fold the
-        // submitted fields into the context body and carry on down the
-        // chain, same as a webhook trigger firing.
+        // Any non-GET hit on this node's own path is treated as the form
+        // submission: fold the submitted fields into the context body and
+        // carry on down the chain, same as a webhook trigger firing.
         ctx.body = trigger.body ?? ctx.body;
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
     },

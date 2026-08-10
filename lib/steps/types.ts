@@ -59,7 +59,22 @@ export type StepOutcome =
     | { done: false; nextNodeIds: string[] };
 
 export interface StepExecutor {
-    run(args: { node: IWorkflowNode; ctx: StepContext; trigger: WebhookTrigger; edges: IWorkflowEdge[] }): Promise<StepOutcome> | StepOutcome;
+    run(args: {
+        node: IWorkflowNode;
+        ctx: StepContext;
+        trigger: WebhookTrigger;
+        edges: IWorkflowEdge[];
+        // True only for the node that matched the incoming request's own
+        // path+method (the one `findWebhookNode` picked) — false for every
+        // node reached by following an edge from another step. This is what
+        // lets a step like Input Form tell "a person just requested *my*
+        // path" apart from "a previous step's run just handed control to
+        // me" — see lib/steps/inputForm.ts, which needs that distinction to
+        // support Input Form → Input Form chains (an inputForm step reached
+        // mid-chain must render its own form, not reinterpret whatever
+        // request started the chain as its submission).
+        isEntry: boolean;
+    }): Promise<StepOutcome> | StepOutcome;
     // Only needed by steps reachable at /<path> (webhook, inputForm, ...).
     // Decides whether this node should handle an incoming request to that
     // path/method. Steps that are never a workflow's entry point (like
