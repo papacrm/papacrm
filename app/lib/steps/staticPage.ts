@@ -2,7 +2,7 @@ import type { WorkflowNodeDef } from "./types";
 
 const staticPageStep: WorkflowNodeDef = {
     type: "staticPage",
-    label: "Static Page",
+    label: "Page",
     description: "Responds with an HTML page",
     color: "#059669",
     kind: "terminal",
@@ -11,7 +11,7 @@ const staticPageStep: WorkflowNodeDef = {
         {
             key: "html",
             label: "HTML — use {{field}} for data from an earlier step",
-            kind: "textarea",
+            kind: "html",
             placeholder: "<h1>Thanks, {{name}}!</h1>",
         },
     ],

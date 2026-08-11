@@ -7,6 +7,8 @@ import { orpc, withAuthRetry } from "@/client";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
+import { Textarea } from "@/app/components/ui/textarea";
+import { HtmlEditor } from "@/app/components/ui/html-editor";
 import { NODE_DEFS, NODE_ORDER, type WorkflowNode, type WorkflowEdge, type WorkflowNodeType } from "@/app/lib/workflowTypes";
 
 const NODE_WIDTH = 200;
@@ -473,14 +475,20 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                                 </option>
                                             ))}
                                         </select>
+                                    ) : field.kind === "html" ? (
+                                        <HtmlEditor
+                                            id={field.key}
+                                            value={selectedNode.data?.[field.key] ?? ""}
+                                            onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
+                                            placeholder={field.placeholder}
+                                        />
                                     ) : field.kind === "textarea" ? (
-                                        <textarea
+                                        <Textarea
                                             id={field.key}
                                             value={selectedNode.data?.[field.key] ?? ""}
                                             onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
                                             placeholder={field.placeholder}
                                             rows={4}
-                                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground"
                                         />
                                     ) : (
                                         <Input

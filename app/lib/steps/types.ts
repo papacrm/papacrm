@@ -23,7 +23,7 @@ export interface WorkflowEdge {
 export interface WorkflowField {
     key: string;
     label: string;
-    kind: "text" | "textarea" | "select";
+    kind: "text" | "textarea" | "select" | "html";
     placeholder?: string;
     options?: { value: string; label: string }[];
     // For "select" fields whose options can't be known statically (e.g.
