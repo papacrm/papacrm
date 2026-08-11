@@ -18,6 +18,12 @@ import getHeaderStep from "./getHeader";
 import setHeaderStep from "./setHeader";
 import jwtVerifyStep from "./jwtVerify";
 import jwtSignStep from "./jwtSign";
+import menuStep from "./menu";
+import tabsStep from "./tabs";
+import navbarStep from "./navbar";
+import footerStep from "./footer";
+import viewStep from "./view";
+import gapStep from "./gap";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -48,6 +54,12 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     setHeader: setHeaderStep,
     jwtVerify: jwtVerifyStep,
     jwtSign: jwtSignStep,
+    menu: menuStep,
+    tabs: tabsStep,
+    navbar: navbarStep,
+    footer: footerStep,
+    view: viewStep,
+    gap: gapStep,
 };
 
 export const NODE_ORDER: WorkflowNodeType[] = [
@@ -60,6 +72,12 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "condition",
     "mapper",
     "staticPage",
+    "view",
+    "menu",
+    "tabs",
+    "navbar",
+    "footer",
+    "gap",
     "table",
     "container",
     "saveRecord",

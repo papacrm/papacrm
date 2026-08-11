@@ -32,7 +32,7 @@ export interface WebhookTrigger {
 // React, no SSR calls in here) while still getting real NukeJS SSR —
 // `useHtml()`, layouts, etc. — for every workflow-rendered page, plus
 // automatic escaping (no more hand-rolled `escapeHtml`).
-export type WorkflowPageComponent = "staticPage" | "inputForm" | "table" | "container";
+export type WorkflowPageComponent = "staticPage" | "inputForm" | "table" | "container" | "view";
 
 export interface WorkflowPage {
     title: string;
@@ -104,6 +104,11 @@ export interface StepExecutor {
         ctx: StepContext;
         trigger: WebhookTrigger;
         edges: IWorkflowEdge[];
+        // Every node in the workflow, not just this one — needed by View
+        // (see lib/steps/view.ts) to look up the actual data of the
+        // page-building blocks (Menu, Tabs, Navbar, Footer, Table, Input
+        // Form, nested View) wired into it. Most steps never touch this.
+        nodes: IWorkflowNode[];
         // True only for the node the run actually starts at — either the
         // webhook node matched by `findWebhookNode`, or (when the request
         // is a form submission — see runWorkflow in ../workflowEngine.ts)

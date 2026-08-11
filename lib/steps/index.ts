@@ -19,6 +19,12 @@ import getHeaderStep from "./getHeader";
 import setHeaderStep from "./setHeader";
 import jwtVerifyStep from "./jwtVerify";
 import jwtSignStep from "./jwtSign";
+import menuStep from "./menu";
+import tabsStep from "./tabs";
+import navbarStep from "./navbar";
+import footerStep from "./footer";
+import viewStep from "./view";
+import gapStep from "./gap";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -48,6 +54,12 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     setHeader: setHeaderStep,
     jwtVerify: jwtVerifyStep,
     jwtSign: jwtSignStep,
+    menu: menuStep,
+    tabs: tabsStep,
+    navbar: navbarStep,
+    footer: footerStep,
+    view: viewStep,
+    gap: gapStep,
 };
 
 export * from "./types";

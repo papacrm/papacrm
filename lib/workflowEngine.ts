@@ -65,7 +65,7 @@ export async function runWorkflow(
         const executor = STEP_EXECUTORS[node.type];
         if (!executor) return undefined;
 
-        const outcome = await executor.run({ node, ctx, trigger, edges, isEntry });
+        const outcome = await executor.run({ node, ctx, trigger, edges, nodes, isEntry });
         if (outcome.done) return outcome.result;
 
         // Every node reached from here on is a *chained* step, not the

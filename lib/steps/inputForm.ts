@@ -8,7 +8,7 @@ export interface InputFormField {
     required?: boolean;
 }
 
-function parseFields(node: IWorkflowNode): InputFormField[] {
+export function parseFields(node: IWorkflowNode): InputFormField[] {
     try {
         const parsed = JSON.parse(node.data?.fields ?? "[]");
         return Array.isArray(parsed) ? parsed : [];

@@ -1,12 +1,12 @@
 import { readPath, type StepContext, type StepExecutor } from "./types";
 
-interface TableField {
+export interface TableField {
     key: string;
     label: string;
     type?: string;
 }
 
-interface TableRow {
+export interface TableRow {
     _id: string;
     data: Record<string, any>;
 }
@@ -37,7 +37,11 @@ function asRow(value: unknown, index: number): TableRow {
 //     body, or a Function/Call's result — shown as one row
 //   - as a last resort, the request's own query string (a GET webhook hit
 //     with e.g. ?status=active)
-function resolveRows(ctx: StepContext): { fields: TableField[]; documents: TableRow[] } {
+// Exported so View (see view.ts) can resolve an embedded Table block's
+// rows from the same shared ctx, without invoking Table's own run() (which
+// always ends the request as a standalone page — not what an *embedded*
+// table should do).
+export function resolveRows(ctx: StepContext): { fields: TableField[]; documents: TableRow[] } {
     const body = ctx.body;
 
     if (body && typeof body === "object" && Array.isArray((body as any).documents)) {

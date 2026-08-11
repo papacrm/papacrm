@@ -10,11 +10,44 @@ import { Label } from "@/app/components/ui/label";
 import { Textarea } from "@/app/components/ui/textarea";
 import { HtmlEditor } from "@/app/components/ui/html-editor";
 import { NODE_DEFS, NODE_ORDER, type WorkflowNode, type WorkflowEdge, type WorkflowNodeType } from "@/app/lib/workflowTypes";
+import { cn } from "@/app/lib/utils";
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 78;
 const CANVAS_WIDTH = 1600;
 const CANVAS_HEIGHT = 900;
+
+// Step types that can be dropped into a View's page — see the "Layout"
+// section rendered below for a selected View node, and its server-side
+// counterpart, EMBEDDABLE_TYPES in lib/steps/view.ts.
+const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap"];
+
+// Step types whose inspector gets extra room — a page built visually
+// (View), a form's field list (Input Form), and a full HTML page
+// (Static Page) all need more space than a couple of text fields do.
+const WIDE_INSPECTOR_TYPES: WorkflowNodeType[] = ["view", "inputForm", "staticPage"];
+
+// Pixel height of one "row" slot in the View layout designer. Row is only
+// a stacking/ordering key (see ViewLayoutEntry) — this is just how tall a
+// row reads on screen while arranging blocks, not a real CSS height.
+const DESIGNER_ROW_HEIGHT = 64;
+const DESIGNER_MAX_ROW = 40;
+
+interface ViewLayoutEntry {
+    col?: number;
+    span?: number;
+    row?: number;
+    height?: "auto" | "full";
+}
+
+function parseViewLayout(raw: string | undefined): Record<string, ViewLayoutEntry> {
+    try {
+        const parsed = JSON.parse(raw ?? "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+        return {};
+    }
+}
 
 interface WorkflowEditorProps {
     workflow: {
@@ -54,6 +87,18 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
     const nodesRef = useRef<WorkflowNode[]>(workflow.nodes);
     const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
     const connectRef = useRef<{ fromId: string; handle: string | null } | null>(null);
+    const designerRef = useRef<HTMLDivElement>(null);
+    const layoutDragRef = useRef<{
+        viewId: string;
+        childId: string;
+        mode: "move" | "resize";
+        startClientX: number;
+        startClientY: number;
+        startCol: number;
+        startSpan: number;
+        startRow: number;
+        colWidthPx: number;
+    } | null>(null);
 
     const [name, setName] = useState(workflow.name);
     const [active, setActive] = useState(workflow.active);
@@ -168,12 +213,35 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                     // adds a new edge instead of replacing whatever the
                     // handle was already connected to. Re-dragging onto the
                     // same target is a no-op rather than a duplicate edge.
+                    let isNewEdge = false;
                     setEdges((prev) => {
                         const alreadyConnected = prev.some((edge) => edge.source === fromId && edge.sourceHandle === handle && edge.target === target.id);
                         if (alreadyConnected) return prev;
+                        isNewEdge = true;
                         return [...prev, { id: newId("e"), source: fromId, sourceHandle: handle, target: target.id }];
                     });
                     setDirty(true);
+
+                    // Wiring a block into a View should show up somewhere
+                    // the person can immediately see, not stacked
+                    // invisibly on top of whatever's already at the
+                    // default 0,0 spot — drop it into the next empty row
+                    // instead. Only for a genuinely new connection: a
+                    // re-drag over an already-connected block shouldn't
+                    // reset a position the person may have since dragged
+                    // elsewhere in the Layout designer.
+                    if (isNewEdge && target.type === "view") {
+                        setNodes((prev) =>
+                            prev.map((n) => {
+                                if (n.id !== target.id) return n;
+                                const layout = parseViewLayout(n.data?.layout);
+                                if (layout[fromId]) return n;
+                                const maxRow = Object.values(layout).reduce((max, entry) => Math.max(max, entry.row ?? 0), -1);
+                                const nextLayout = { ...layout, [fromId]: { col: 0, span: 12, row: maxRow + 1, height: "auto" as const } };
+                                return { ...n, data: { ...n.data, layout: JSON.stringify(nextLayout) } };
+                            }),
+                        );
+                    }
                 }
                 connectRef.current = null;
                 setConnectingLine(null);
@@ -204,6 +272,60 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [selectedNodeId]);
+
+    // Drag-to-move and drag-to-resize for blocks inside the View layout
+    // designer (see the "Layout" section of a selected View's inspector).
+    // Same window-level-listener approach as the main canvas drag above,
+    // kept in its own effect since it targets a different ref and a
+    // different piece of UI.
+    useEffect(() => {
+        function onMove(e: MouseEvent) {
+            const drag = layoutDragRef.current;
+            if (!drag) return;
+            const deltaCols = Math.round((e.clientX - drag.startClientX) / drag.colWidthPx);
+            const deltaRows = Math.round((e.clientY - drag.startClientY) / DESIGNER_ROW_HEIGHT);
+
+            if (drag.mode === "move") {
+                const span = drag.startSpan;
+                const col = Math.max(0, Math.min(12 - span, drag.startCol + deltaCols));
+                const row = Math.max(0, Math.min(DESIGNER_MAX_ROW, drag.startRow + deltaRows));
+                updateViewLayout(drag.viewId, drag.childId, { col, row });
+            } else {
+                const span = Math.max(1, Math.min(12 - drag.startCol, drag.startSpan + deltaCols));
+                updateViewLayout(drag.viewId, drag.childId, { span });
+            }
+        }
+
+        function onUp() {
+            layoutDragRef.current = null;
+        }
+
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        return () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    function startLayoutDrag(e: React.MouseEvent, viewId: string, childId: string, pos: Required<ViewLayoutEntry>, mode: "move" | "resize") {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = designerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        layoutDragRef.current = {
+            viewId,
+            childId,
+            mode,
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            startCol: pos.col,
+            startSpan: pos.span,
+            startRow: pos.row,
+            colWidthPx: rect.width / 12,
+        };
+    }
 
     function handleNodeMouseDown(e: React.MouseEvent, node: WorkflowNode) {
         e.stopPropagation();
@@ -248,6 +370,22 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
 
     function updateNodeData(nodeId: string, key: string, value: string) {
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, [key]: value } } : n)));
+        setDirty(true);
+    }
+
+    // Merges a single child's position into a View node's data.layout —
+    // keyed by the child step's id, so it survives independently of the
+    // order blocks were connected in. See the "Layout" section of the
+    // inspector below and lib/steps/view.ts (the server-side reader).
+    function updateViewLayout(viewNodeId: string, childId: string, patch: ViewLayoutEntry) {
+        setNodes((prev) =>
+            prev.map((n) => {
+                if (n.id !== viewNodeId) return n;
+                const layout = parseViewLayout(n.data?.layout);
+                const next = { ...layout, [childId]: { ...layout[childId], ...patch } };
+                return { ...n, data: { ...n.data, layout: JSON.stringify(next) } };
+            }),
+        );
         setDirty(true);
     }
 
@@ -483,7 +621,12 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                 </div>
 
                 {/* Inspector */}
-                <div className="w-72 shrink-0 overflow-y-auto border-l border-neutral-200 p-4">
+                <div
+                    className={cn(
+                        "shrink-0 overflow-y-auto border-l border-neutral-200 p-4",
+                        selectedNode && WIDE_INSPECTOR_TYPES.includes(selectedNode.type) ? "w-[32rem]" : "w-72",
+                    )}
+                >
                     {!selectedNode ? (
                         <p className="text-sm text-neutral-400">
                             Select a step to edit it, or drag from the dot on its right edge to connect it to another step. Drag from the same dot again to
@@ -569,6 +712,97 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                     )}
                                 </div>
                             ))}
+
+                            {selectedNode.type === "view" &&
+                                (() => {
+                                    const layout = parseViewLayout(selectedNode.data?.layout);
+                                    const children = edges
+                                        .filter((e) => e.target === selectedNode.id)
+                                        .map((e) => nodes.find((n) => n.id === e.source))
+                                        .filter((n): n is WorkflowNode => !!n && VIEW_BLOCK_TYPES.includes(n.type));
+                                    const positions = new Map(children.map((child) => [child.id, { col: 0, span: 12, row: 0, height: "auto" as const, ...layout[child.id] }]));
+                                    const maxRow = children.reduce((max, child) => Math.max(max, positions.get(child.id)!.row), 0);
+
+                                    return (
+                                        <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-neutral-900">Layout</p>
+                                                <p className="text-xs text-neutral-500">
+                                                    Connect a Menu, Tabs, Navbar, Footer, Table, Input Form, Page, Gap, or another View into this step,
+                                                    then drag it below to place it on the page — a 12-column grid. Drag a block's right edge to resize it.{" "}
+                                                    <span className="font-medium text-neutral-600">Scrolls</span> is a normal page that scrolls with its
+                                                    content; <span className="font-medium text-neutral-600">Full screen</span> fills the browser window,
+                                                    like an app screen.
+                                                </p>
+                                            </div>
+
+                                            {children.length === 0 ? (
+                                                <p className="text-xs text-neutral-400">
+                                                    Nothing connected yet. Drag from a block step's output dot onto this step to add it here.
+                                                </p>
+                                            ) : (
+                                                <div
+                                                    ref={designerRef}
+                                                    className="relative overflow-hidden rounded-md border border-neutral-200 bg-neutral-50"
+                                                    style={{ height: (maxRow + 3) * DESIGNER_ROW_HEIGHT }}
+                                                >
+                                                    <div className="pointer-events-none absolute inset-0 grid grid-cols-12">
+                                                        {Array.from({ length: 12 }).map((_, i) => (
+                                                            <div key={i} className="border-r border-dashed border-neutral-200 last:border-r-0" />
+                                                        ))}
+                                                    </div>
+
+                                                    {children.map((child) => {
+                                                        const pos = positions.get(child.id)!;
+                                                        return (
+                                                            <div
+                                                                key={child.id}
+                                                                onMouseDown={(e) => startLayoutDrag(e, selectedNode.id, child.id, pos, "move")}
+                                                                className="absolute flex cursor-move select-none flex-col justify-between overflow-hidden rounded-md border border-neutral-300 bg-white p-2 shadow-sm"
+                                                                style={{
+                                                                    left: `${(pos.col / 12) * 100}%`,
+                                                                    width: `${(pos.span / 12) * 100}%`,
+                                                                    top: pos.row * DESIGNER_ROW_HEIGHT + 4,
+                                                                    height: DESIGNER_ROW_HEIGHT - 8,
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center justify-between gap-1">
+                                                                    <span className="flex min-w-0 items-center gap-1.5">
+                                                                        <span
+                                                                            className="h-2 w-2 shrink-0 rounded-full"
+                                                                            style={{ backgroundColor: NODE_DEFS[child.type].color }}
+                                                                        />
+                                                                        <span className="truncate text-xs font-medium text-neutral-800">{NODE_DEFS[child.type].label}</span>
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                                        onClick={() =>
+                                                                            updateViewLayout(selectedNode.id, child.id, { height: pos.height === "full" ? "auto" : "full" })
+                                                                        }
+                                                                        className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 hover:bg-neutral-200"
+                                                                        title={
+                                                                            pos.height === "full"
+                                                                                ? "Fills the screen — click for a normal scrolling page"
+                                                                                : "Normal scrolling page — click to fill the screen"
+                                                                        }
+                                                                    >
+                                                                        {pos.height === "full" ? "Full screen" : "Scrolls"}
+                                                                    </button>
+                                                                </div>
+                                                                <p className="truncate text-[10px] text-neutral-400">{NODE_DEFS[child.type].summarize(child.data ?? {})}</p>
+                                                                <div
+                                                                    onMouseDown={(e) => startLayoutDrag(e, selectedNode.id, child.id, pos, "resize")}
+                                                                    className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
+                                                                />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
 
                             {(() => {
                                 const note = NODE_DEFS[selectedNode.type].inspectorNote?.(selectedNode.data ?? {}, { origin, active });

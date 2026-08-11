@@ -22,7 +22,13 @@ export type WorkflowNodeType =
     | "getHeader"
     | "setHeader"
     | "jwtVerify"
-    | "jwtSign";
+    | "jwtSign"
+    | "menu"
+    | "tabs"
+    | "navbar"
+    | "footer"
+    | "view"
+    | "gap";
 
 export interface IWorkflowNode {
     id: string;
@@ -78,6 +84,12 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "setHeader",
                 "jwtVerify",
                 "jwtSign",
+                "menu",
+                "tabs",
+                "navbar",
+                "footer",
+                "view",
+                "gap",
             ],
         },
         x: { type: Number, required: true, default: 0 },
