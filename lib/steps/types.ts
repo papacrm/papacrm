@@ -8,8 +8,19 @@ import type { IWorkflowNode, IWorkflowEdge } from "../models/Workflow";
 
 export interface WebhookTrigger {
     method: string;
+    // Raw request path (e.g. "something/abc123"), used to extract [param]
+    // segments against the matching webhook node's configured path — see
+    // matchPath below and lib/steps/webhook.ts.
+    path: string;
     query: Record<string, string>;
     body: unknown;
+    // Incoming request headers, lower-cased keys (Node lower-cases them
+    // already, but this keeps lookups predictable regardless of source).
+    // Used by Get Header — see lib/steps/getHeader.ts.
+    headers: Record<string, string>;
+    // Incoming request cookies, parsed from the Cookie header. Used by Get
+    // Cookie — see lib/steps/getCookie.ts.
+    cookies: Record<string, string>;
 }
 
 // A step that wants to render a page hands back a *description* of that
@@ -21,7 +32,7 @@ export interface WebhookTrigger {
 // React, no SSR calls in here) while still getting real NukeJS SSR —
 // `useHtml()`, layouts, etc. — for every workflow-rendered page, plus
 // automatic escaping (no more hand-rolled `escapeHtml`).
-export type WorkflowPageComponent = "staticPage" | "inputForm";
+export type WorkflowPageComponent = "staticPage" | "inputForm" | "table" | "container";
 
 export interface WorkflowPage {
     title: string;
@@ -29,10 +40,28 @@ export interface WorkflowPage {
     props: Record<string, unknown>;
 }
 
+// Carried by every WorkflowResult variant so a step anywhere in the run
+// (Set Header / Set Cookie — see lib/steps/setHeader.ts and
+// lib/steps/setCookie.ts) can affect the actual HTTP response, no matter
+// which branch of a fan-out ends up producing the page/json/empty result.
+// Populated from ctx.responseHeaders / ctx.setCookies once the run
+// finishes — see runWorkflow in ../workflowEngine.ts.
+interface WorkflowResultExtras {
+    headers?: Record<string, string>;
+    cookies?: SetCookieInstruction[];
+}
+
+export interface SetCookieInstruction {
+    name: string;
+    value: string;
+    maxAge?: number;
+    httpOnly?: boolean;
+}
+
 export type WorkflowResult =
-    | { kind: "page"; status: number; page: WorkflowPage }
-    | { kind: "json"; status: number; data: unknown }
-    | { kind: "empty"; status: number };
+    | ({ kind: "page"; status: number; page: WorkflowPage } & WorkflowResultExtras)
+    | ({ kind: "json"; status: number; data: unknown } & WorkflowResultExtras)
+    | ({ kind: "empty"; status: number } & WorkflowResultExtras);
 
 export interface StepContext {
     query: Record<string, string>;
@@ -46,6 +75,17 @@ export interface StepContext {
     // id of the workflow currently running — steps that persist data (e.g.
     // Save to Database) need this to know which workflow a record belongs to.
     workflowId: string;
+    // How many "Call" steps deep this run is nested (0 for a run started by
+    // a real webhook/function trigger). Incremented by lib/steps/call.ts
+    // each time it starts a sub-workflow — see MAX_CALL_DEPTH below.
+    callDepth: number;
+    // Response headers queued by Set Header steps (lib/steps/setHeader.ts),
+    // applied to the real HTTP response once the run finishes. Shared
+    // across every branch, same as `body`.
+    responseHeaders: Record<string, string>;
+    // Set-Cookie instructions queued by Set Cookie steps
+    // (lib/steps/setCookie.ts), applied the same way.
+    setCookies: SetCookieInstruction[];
 }
 
 export type StepOutcome =
@@ -88,9 +128,43 @@ export interface StepExecutor {
 // hit into an infinite loop.
 export const MAX_STEPS = 50;
 
+// Guards against a Call step (see lib/steps/call.ts) starting a
+// sub-workflow that itself calls another workflow, and so on — including a
+// workflow calling itself, directly or via a longer cycle. Each nesting
+// level still gets its own MAX_STEPS budget, so this bounds the *depth* of
+// recursion, not the total amount of work.
+export const MAX_CALL_DEPTH = 10;
+
 export function matchesPath(node: IWorkflowNode, path: string): boolean {
-    const cleanPath = path.replace(/^\/+|\/+$/g, "");
-    return String(node.data?.path ?? "").replace(/^\/+|\/+$/g, "") === cleanPath;
+    return matchPath(String(node.data?.path ?? ""), path) !== null;
+}
+
+// Matches a configured webhook path (which may contain `[param]` segments,
+// e.g. "something/[id]") against the actual request path, returning the
+// extracted params (e.g. { id: "abc123" }) on a match, or null if the
+// segment count or any literal segment doesn't line up. Segment-by-segment
+// only — no partial-segment or wildcard matching, same spirit as the
+// framework's own [...path] file routing.
+export function matchPath(pattern: string, path: string): Record<string, string> | null {
+    const clean = (s: string) => s.replace(/^\/+|\/+$/g, "");
+    const patternSegs = clean(pattern).split("/").filter(Boolean);
+    const pathSegs = clean(path).split("/").filter(Boolean);
+    if (patternSegs.length !== pathSegs.length) return null;
+
+    const params: Record<string, string> = {};
+    for (let i = 0; i < patternSegs.length; i++) {
+        const paramMatch = /^\[(\w+)\]$/.exec(patternSegs[i]);
+        if (paramMatch) {
+            try {
+                params[paramMatch[1]] = decodeURIComponent(pathSegs[i]);
+            } catch {
+                params[paramMatch[1]] = pathSegs[i];
+            }
+        } else if (patternSegs[i] !== pathSegs[i]) {
+            return null;
+        }
+    }
+    return params;
 }
 
 // Follows every outgoing edge from `node` (a node can now fan out to more
@@ -115,4 +189,18 @@ export function renderTemplate(template: string, ctx: StepContext): string {
         const value = readPath(ctx.body, path) ?? readPath(ctx.query, path);
         return value === undefined || value === null ? "" : String(value);
     });
+}
+
+// Same {{field}} templating as renderTemplate, applied to every string
+// value of a plain object — non-string values (numbers, booleans, nested
+// objects/arrays) pass through unchanged. Used by steps that build a JSON
+// object from earlier context, e.g. JWT Sign's payload — see
+// lib/steps/jwtSign.ts. (Mirrors Mapper's own inline version in
+// mapper.ts — kept separate there since it predates this helper.)
+export function renderTemplateValues(obj: Record<string, unknown>, ctx: StepContext): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+        out[key] = typeof value === "string" ? renderTemplate(value, ctx) : value;
+    }
+    return out;
 }

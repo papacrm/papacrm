@@ -68,6 +68,8 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
     const [saved, setSaved] = useState(false);
     const [origin, setOrigin] = useState("");
     const [lists, setLists] = useState<{ _id: string; name: string }[] | null>(null);
+    const [workflows, setWorkflows] = useState<{ _id: string; name: string }[] | null>(null);
+    const [stepQuery, setStepQuery] = useState("");
 
     nodesRef.current = nodes;
 
@@ -85,6 +87,22 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                 setLists((data as any[]).map((l) => ({ _id: l._id, name: l.name })));
             } catch {
                 setLists([]);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Backs any field with `dynamicOptions: "workflows"` (currently just
+    // Call's "Workflow" picker) — same fetch-once-up-front approach as
+    // Lists above. Includes this workflow itself: calling yourself is
+    // still bounded by MAX_CALL_DEPTH, so there's no need to filter it out.
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await withAuthRetry(() => orpc.workflow.list());
+                setWorkflows((data as any[]).map((w) => ({ _id: w._id, name: w.name })));
+            } catch {
+                setWorkflows([]);
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,6 +188,23 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         };
     }, []);
 
+    // Delete/Backspace removes the selected step, as long as the person
+    // isn't typing in a field — otherwise Backspace while editing a text
+    // field would delete the node out from under them.
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            if (e.key !== "Delete" && e.key !== "Backspace") return;
+            const target = e.target as HTMLElement | null;
+            const tag = target?.tagName;
+            const isEditable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!target?.isContentEditable;
+            if (isEditable || !selectedNodeId) return;
+            e.preventDefault();
+            deleteNode(selectedNodeId);
+        }
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [selectedNodeId]);
+
     function handleNodeMouseDown(e: React.MouseEvent, node: WorkflowNode) {
         e.stopPropagation();
         setSelectedNodeId(node.id);
@@ -250,6 +285,15 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
 
+    const filteredStepTypes = (() => {
+        const q = stepQuery.trim().toLowerCase();
+        if (!q) return NODE_ORDER;
+        return NODE_ORDER.filter((type) => {
+            const def = NODE_DEFS[type];
+            return def.label.toLowerCase().includes(q) || def.description.toLowerCase().includes(q);
+        });
+    })();
+
     return (
         <div className="flex h-[calc(100vh-73px)] flex-col">
             {/* Top bar */}
@@ -296,8 +340,15 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                 {/* Palette */}
                 <div className="w-48 shrink-0 overflow-y-auto border-r border-neutral-200 p-4">
                     <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Add step</p>
+                    <Input
+                        type="text"
+                        value={stepQuery}
+                        onChange={(e) => setStepQuery(e.target.value)}
+                        placeholder="Search steps…"
+                        className="mb-3"
+                    />
                     <div className="flex flex-col gap-2">
-                        {NODE_ORDER.map((type) => {
+                        {filteredStepTypes.map((type) => {
                             const def = NODE_DEFS[type];
                             return (
                                 <button
@@ -314,6 +365,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                 </button>
                             );
                         })}
+                        {filteredStepTypes.length === 0 && <p className="px-1 text-xs text-neutral-400">No steps match “{stepQuery}”.</p>}
                     </div>
                 </div>
 
@@ -459,6 +511,23 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                             {lists?.map((l) => (
                                                 <option key={l._id} value={l._id}>
                                                     {l.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : field.kind === "select" && field.dynamicOptions === "workflows" ? (
+                                        <select
+                                            id={field.key}
+                                            value={selectedNode.data?.[field.key] ?? ""}
+                                            onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
+                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                            disabled={workflows === null}
+                                        >
+                                            <option value="">
+                                                {workflows === null ? "Loading workflows…" : workflows.length === 0 ? "No workflows yet" : "Select a workflow…"}
+                                            </option>
+                                            {workflows?.map((w) => (
+                                                <option key={w._id} value={w._id}>
+                                                    {w._id === workflow._id ? `${w.name} (this workflow)` : w.name}
                                                 </option>
                                             ))}
                                         </select>

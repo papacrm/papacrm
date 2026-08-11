@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import type { WorkflowPageComponent } from "../../../lib/steps/types";
 import StaticPage from "./StaticPage";
 import InputFormPage from "./InputFormPage";
+import Table from "./Table";
+import Container from "./Container";
 
 // Maps a WorkflowPage's `component` key (set by the step executor in
 // lib/steps/*.ts) to the React component that actually renders it. Keeping
@@ -12,4 +14,6 @@ import InputFormPage from "./InputFormPage";
 export const WEBHOOK_PAGE_COMPONENTS: Record<WorkflowPageComponent, ComponentType<any>> = {
     staticPage: StaticPage,
     inputForm: InputFormPage,
+    table: Table,
+    container: Container,
 };

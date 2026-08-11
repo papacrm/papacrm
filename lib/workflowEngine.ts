@@ -19,6 +19,10 @@ export async function runWorkflow(
     startNodeId: string,
     trigger: WebhookTrigger,
     workflowId: string,
+    // Set by lib/steps/call.ts when this run is itself a sub-workflow
+    // started by a Call step — never passed by a real webhook/function
+    // trigger, which always starts fresh at depth 0.
+    callDepth = 0,
 ): Promise<WorkflowResult> {
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
     // Shared across every branch of the run, including parallel ones — a
@@ -26,7 +30,7 @@ export async function runWorkflow(
     // node downstream, on every branch, sees that update. This is the
     // "context between steps" that lets a page later in the chain read a
     // value someone typed into a form earlier in the chain.
-    const ctx: StepContext = { query: trigger.query, body: trigger.body, workflowId };
+    const ctx: StepContext = { query: trigger.query, body: trigger.body, workflowId, callDepth, responseHeaders: {}, setCookies: [] };
     let stepsRun = 0;
 
     // A form submission (see lib/steps/inputForm.ts / WebhookInputForm.tsx)
@@ -73,5 +77,16 @@ export async function runWorkflow(
     }
 
     const result = await runFrom(actualStartNodeId, true);
-    return result ?? { kind: "empty", status: 204 };
+    const finalResult = result ?? { kind: "empty", status: 204 };
+    // Set Header / Set Cookie (see lib/steps/setHeader.ts,
+    // lib/steps/setCookie.ts) queue onto the shared ctx rather than
+    // returning a result themselves, so they work no matter which branch
+    // of a fan-out is the one that actually renders — fold whatever they
+    // queued onto the response the caller (server/hooks/[...path].ts)
+    // will send.
+    return {
+        ...finalResult,
+        headers: Object.keys(ctx.responseHeaders).length ? ctx.responseHeaders : finalResult.headers,
+        cookies: ctx.setCookies.length ? ctx.setCookies : finalResult.cookies,
+    };
 }

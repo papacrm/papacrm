@@ -3,7 +3,26 @@ import mongoose, { Schema, Document, Model, Types } from "mongoose";
 // Kept in sync with app/lib/workflowTypes.ts on the client side — that
 // file is the source of truth for labels/fields/icons per type, this is
 // just the persistence shape.
-export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm" | "saveRecord" | "saveToList" | "mapper";
+export type WorkflowNodeType =
+    | "webhook"
+    | "staticPage"
+    | "httpRequest"
+    | "condition"
+    | "inputForm"
+    | "saveRecord"
+    | "saveToList"
+    | "mapper"
+    | "function"
+    | "call"
+    | "table"
+    | "container"
+    | "query"
+    | "setCookie"
+    | "getCookie"
+    | "getHeader"
+    | "setHeader"
+    | "jwtVerify"
+    | "jwtSign";
 
 export interface IWorkflowNode {
     id: string;
@@ -36,7 +55,31 @@ export interface IWorkflow extends Document {
 const WorkflowNodeSchema = new Schema<IWorkflowNode>(
     {
         id: { type: String, required: true },
-        type: { type: String, required: true, enum: ["webhook", "staticPage", "httpRequest", "condition", "inputForm", "saveRecord", "saveToList", "mapper"] },
+        type: {
+            type: String,
+            required: true,
+            enum: [
+                "webhook",
+                "staticPage",
+                "httpRequest",
+                "condition",
+                "inputForm",
+                "saveRecord",
+                "saveToList",
+                "mapper",
+                "function",
+                "call",
+                "table",
+                "container",
+                "query",
+                "setCookie",
+                "getCookie",
+                "getHeader",
+                "setHeader",
+                "jwtVerify",
+                "jwtSign",
+            ],
+        },
         x: { type: Number, required: true, default: 0 },
         y: { type: Number, required: true, default: 0 },
         data: { type: Schema.Types.Mixed, default: {} },

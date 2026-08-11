@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { renderComponent } from "nukejs/server";
 import { readCookies, REFRESH_COOKIE_NAME } from "./lib/cookies";
+import { stringifySetCookie } from "cookie";
 import { verifyRefreshToken } from "./lib/jwt";
 import { connectDB } from "./lib/mongoose";
 import Workflow from "./lib/models/Workflow";
@@ -103,13 +104,44 @@ async function tryHandleWebhook(
         }
     }
 
+    // Request headers, lower-cased for predictable lookups by Get Header —
+    // Node already lower-cases these, but normalize regardless of runtime.
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+        if (typeof value === "string") headers[key.toLowerCase()] = value;
+        else if (Array.isArray(value)) headers[key.toLowerCase()] = value.join(", ");
+    }
+    const cookies = readCookies(headers.cookie) as Record<string, string>;
+
     const result = await runWorkflow(
         match.workflow.nodes as any,
         match.workflow.edges as any,
         match.nodeId,
-        { method, query, body },
+        { method, path, query, body, headers, cookies },
         String(match.workflow._id),
     );
+
+    // Set Header / Set Cookie steps queue onto the result regardless of
+    // which kind of response the run ends with — apply them before
+    // writing anything else.
+    if (result.headers) {
+        for (const [name, value] of Object.entries(result.headers)) {
+            res.setHeader(name, value);
+        }
+    }
+    if (result.cookies) {
+        for (const cookie of result.cookies) {
+            const existing = res.getHeader("Set-Cookie");
+            const value = stringifySetCookie({
+                name: cookie.name,
+                value: cookie.value,
+                httpOnly: cookie.httpOnly ?? false,
+                path: "/",
+                maxAge: cookie.maxAge,
+            });
+            res.setHeader("Set-Cookie", existing ? (Array.isArray(existing) ? [...existing, value] : [String(existing), value]) : [value]);
+        }
+    }
 
     if (result.kind === "page") {
         // Real NukeJS SSR instead of a hand-built HTML string: the page

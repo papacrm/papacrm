@@ -8,6 +8,17 @@ import staticPageStep from "./staticPage";
 import saveRecordStep from "./saveRecord";
 import saveToListStep from "./saveToList";
 import mapperStep from "./mapper";
+import functionStep from "./function";
+import callStep from "./call";
+import tableStep from "./table";
+import containerStep from "./container";
+import queryStep from "./query";
+import setCookieStep from "./setCookie";
+import getCookieStep from "./getCookie";
+import getHeaderStep from "./getHeader";
+import setHeaderStep from "./setHeader";
+import jwtVerifyStep from "./jwtVerify";
+import jwtSignStep from "./jwtSign";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -26,6 +37,17 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     saveRecord: saveRecordStep,
     saveToList: saveToListStep,
     mapper: mapperStep,
+    function: functionStep,
+    call: callStep,
+    table: tableStep,
+    container: containerStep,
+    query: queryStep,
+    setCookie: setCookieStep,
+    getCookie: getCookieStep,
+    getHeader: getHeaderStep,
+    setHeader: setHeaderStep,
+    jwtVerify: jwtVerifyStep,
+    jwtSign: jwtSignStep,
 };
 
 export * from "./types";

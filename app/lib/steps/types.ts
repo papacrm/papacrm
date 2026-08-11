@@ -3,7 +3,26 @@
 // — that's the only thing the editor needs to know about it. To add a new
 // step: create `mySte.ts` here, then register it in `index.ts`.
 
-export type WorkflowNodeType = "webhook" | "staticPage" | "httpRequest" | "condition" | "inputForm" | "saveRecord" | "saveToList" | "mapper";
+export type WorkflowNodeType =
+    | "webhook"
+    | "staticPage"
+    | "httpRequest"
+    | "condition"
+    | "inputForm"
+    | "saveRecord"
+    | "saveToList"
+    | "mapper"
+    | "function"
+    | "call"
+    | "table"
+    | "container"
+    | "query"
+    | "setCookie"
+    | "getCookie"
+    | "getHeader"
+    | "setHeader"
+    | "jwtVerify"
+    | "jwtSign";
 
 export interface WorkflowNode {
     id: string;
@@ -28,8 +47,10 @@ export interface WorkflowField {
     options?: { value: string; label: string }[];
     // For "select" fields whose options can't be known statically (e.g.
     // "pick one of your Lists") — the editor fetches the real options at
-    // render time and uses those instead of `options` above.
-    dynamicOptions?: "lists";
+    // render time and uses those instead of `options` above. "workflows"
+    // backs Call's "Workflow" picker the same way "lists" backs Save to
+    // List's — see WorkflowEditor's dynamicOptions handling.
+    dynamicOptions?: "lists" | "workflows";
 }
 
 export interface InspectorNote {
