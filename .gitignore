@@ -5,7 +5,13 @@ dist/
 .cloudflare/
 .vercel/
 wrangler.toml
-vercel.json
+# NOTE: vercel.json is intentionally tracked (see repo root) so Vercel picks
+# up "buildCommand": "npm run build:vercel" without needing a Dashboard
+# override. `npm run build:vercel` itself rewrites this file's contents to
+# just `{"runtime":"nodejs20.x"}` as a build-time side effect (see
+# node_modules/nukejs/dist/build-vercel.js) — that's expected and only
+# affects your local working copy after a local build; don't commit that
+# overwritten version, or `buildCommand` will be lost for the next deploy.
 *.log
 .DS_Store
 app/public/styles.css
