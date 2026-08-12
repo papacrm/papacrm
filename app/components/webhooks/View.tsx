@@ -26,7 +26,15 @@ type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] };
+    | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
+    // A Function wired into a View — a placeholder that's empty until
+    // something fills it. `blocks` wins when present (a View elsewhere
+    // was routed through a Call step calling this Function, handing over
+    // its own block layout to render in place of the slot — see
+    // lib/steps/call.ts); otherwise `content` is plain text from an
+    // ordinary Call step that invoked this same Function. See the
+    // "function" case in lib/steps/view.ts.
+    | { type: "slot"; pos: ViewBlockPosition; name: string; content: string | null; blocks?: ViewBlock[] };
 
 interface ViewProps {
     title: string;
@@ -61,6 +69,22 @@ function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}
                     {block.type === "gap" && <div style={{ height: block.size }} aria-hidden="true" />}
+                    {block.type === "slot" &&
+                        (block.blocks && block.blocks.length > 0 ? (
+                            // A View was routed through a Call step into
+                            // this Function — render its blocks right here
+                            // in place of the slot.
+                            <div data-slot={block.name}>
+                                <BlockGrid blocks={block.blocks} />
+                            </div>
+                        ) : block.content ? (
+                            <div data-slot={block.name}>{block.content}</div>
+                        ) : (
+                            // Not called yet this run — a genuinely empty
+                            // placeholder, same footprint as a Gap, so the
+                            // rest of the layout doesn't jump once it is.
+                            <div data-slot={block.name} aria-hidden="true" />
+                        ))}
                     {block.type === "view" && (
                         <div className="flex flex-col gap-2">
                             {block.title && <h2 className="text-lg font-medium">{block.title}</h2>}

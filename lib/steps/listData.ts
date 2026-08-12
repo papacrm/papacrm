@@ -2,6 +2,7 @@ import { connectDB } from "../mongoose";
 import List from "../models/List";
 import ListDocument from "../models/ListDocument";
 import Workflow from "../models/Workflow";
+import { readPath } from "./types";
 
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 // A workflow-rendered page, not the Lists admin screen — cap how many rows
@@ -10,6 +11,26 @@ const MAX_ROWS = 200;
 
 export function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Shared by Query (lib/steps/query.ts) and Find One (lib/steps/findOne.ts)
+// — a single, simple condition: one field, one operator, one value. Same
+// operator set as the Condition step. Matches against the document's
+// `data.<field>`, mirroring how Condition/renderTemplate reads values
+// elsewhere in this folder.
+export function matchesWhere(doc: { data: Record<string, any> }, field: string, operator: string, value: string): boolean {
+    if (!field) return true;
+    const haystack = readPath(doc.data, field);
+
+    switch (operator) {
+        case "notEquals":
+            return String(haystack ?? "") !== value;
+        case "contains":
+            return typeof haystack === "string" && haystack.includes(value);
+        case "equals":
+        default:
+            return String(haystack ?? "") === value;
+    }
 }
 
 // Used by Container's "table" blocks, which name a list by id directly in

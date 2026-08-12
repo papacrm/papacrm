@@ -20,7 +20,7 @@ const CANVAS_HEIGHT = 900;
 // Step types that can be dropped into a View's page — see the "Layout"
 // section rendered below for a selected View node, and its server-side
 // counterpart, EMBEDDABLE_TYPES in lib/steps/view.ts.
-const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap"];
+const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap", "function"];
 
 // Step types whose inspector gets extra room — a page built visually
 // (View), a form's field list (Input Form), and a full HTML page
@@ -113,7 +113,12 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
     const [saved, setSaved] = useState(false);
     const [origin, setOrigin] = useState("");
     const [lists, setLists] = useState<{ _id: string; name: string }[] | null>(null);
-    const [workflows, setWorkflows] = useState<{ _id: string; name: string }[] | null>(null);
+    const [callableWorkflows, setCallableWorkflows] = useState<{ _id: string; name: string; functions: { id: string; name: string }[] }[] | null>(
+        null,
+    );
+    const [webhookTargets, setWebhookTargets] = useState<
+        { workflowId: string; workflowName: string; nodeId: string; path: string; method: string }[] | null
+    >(null);
     const [stepQuery, setStepQuery] = useState("");
 
     nodesRef.current = nodes;
@@ -137,17 +142,32 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Backs any field with `dynamicOptions: "workflows"` (currently just
-    // Call's "Workflow" picker) — same fetch-once-up-front approach as
-    // Lists above. Includes this workflow itself: calling yourself is
-    // still bounded by MAX_CALL_DEPTH, so there's no need to filter it out.
+    // Backs the Call step's "another workflow" picker — only workflows
+    // with a public Function step and no Webhook step come back (see
+    // `listCallable` in app/router/workflows.ts). Fetched once up front,
+    // same as Lists above, so switching between nodes doesn't re-fetch.
     useEffect(() => {
         (async () => {
             try {
-                const data = await withAuthRetry(() => orpc.workflow.list());
-                setWorkflows((data as any[]).map((w) => ({ _id: w._id, name: w.name })));
+                const data = await withAuthRetry(() => orpc.workflow.listCallable());
+                setCallableWorkflows(data as any[]);
             } catch {
-                setWorkflows([]);
+                setCallableWorkflows([]);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Backs the Route and Forward steps' "webhook to target" picker — a
+    // flat list of every Webhook step across the person's own workflows
+    // (see `listWebhooks` in app/router/workflows.ts).
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await withAuthRetry(() => orpc.workflow.listWebhooks());
+                setWebhookTargets(data as any[]);
+            } catch {
+                setWebhookTargets([]);
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -370,6 +390,15 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
 
     function updateNodeData(nodeId: string, key: string, value: string) {
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, [key]: value } } : n)));
+        setDirty(true);
+    }
+
+    // Same as updateNodeData, but for pickers that need to set several
+    // keys together as one change — e.g. picking a Call step's function
+    // sets both `functionId` and a denormalized `functionName` in one go,
+    // so the node card never shows one without the other mid-update.
+    function updateNodeDataMulti(nodeId: string, patch: Record<string, string>) {
+        setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
         setDirty(true);
     }
 
@@ -657,23 +686,6 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                                 </option>
                                             ))}
                                         </select>
-                                    ) : field.kind === "select" && field.dynamicOptions === "workflows" ? (
-                                        <select
-                                            id={field.key}
-                                            value={selectedNode.data?.[field.key] ?? ""}
-                                            onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
-                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
-                                            disabled={workflows === null}
-                                        >
-                                            <option value="">
-                                                {workflows === null ? "Loading workflows…" : workflows.length === 0 ? "No workflows yet" : "Select a workflow…"}
-                                            </option>
-                                            {workflows?.map((w) => (
-                                                <option key={w._id} value={w._id}>
-                                                    {w._id === workflow._id ? `${w.name} (this workflow)` : w.name}
-                                                </option>
-                                            ))}
-                                        </select>
                                     ) : field.kind === "select" ? (
                                         <select
                                             id={field.key}
@@ -713,6 +725,305 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                 </div>
                             ))}
 
+                            {selectedNode.type === "call" &&
+                                (() => {
+                                    const scope = selectedNode.data?.scope === "external" ? "external" : "internal";
+                                    const internalFunctions = nodes
+                                        .filter((n) => n.type === "function" && n.id !== selectedNode.id)
+                                        .map((n) => ({ id: n.id, name: n.data?.name ? String(n.data.name) : "Untitled function" }));
+                                    const externalWorkflow = callableWorkflows?.find((w) => w._id === selectedNode.data?.workflowId);
+                                    const functionOptions = scope === "internal" ? internalFunctions : externalWorkflow?.functions ?? [];
+
+                                    return (
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="call-scope">Call</Label>
+                                                <select
+                                                    id="call-scope"
+                                                    value={scope}
+                                                    onChange={(e) =>
+                                                        updateNodeDataMulti(selectedNode.id, {
+                                                            scope: e.target.value,
+                                                            workflowId: "",
+                                                            workflowName: "",
+                                                            functionId: "",
+                                                            functionName: "",
+                                                        })
+                                                    }
+                                                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                >
+                                                    <option value="internal">A function in this workflow</option>
+                                                    <option value="external">A function in another workflow</option>
+                                                </select>
+                                            </div>
+
+                                            {scope === "external" && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Label htmlFor="call-workflow">Workflow</Label>
+                                                    <select
+                                                        id="call-workflow"
+                                                        value={selectedNode.data?.workflowId ?? ""}
+                                                        onChange={(e) => {
+                                                            const wf = callableWorkflows?.find((w) => w._id === e.target.value);
+                                                            updateNodeDataMulti(selectedNode.id, {
+                                                                workflowId: e.target.value,
+                                                                workflowName: wf?.name ?? "",
+                                                                functionId: "",
+                                                                functionName: "",
+                                                            });
+                                                        }}
+                                                        className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                        disabled={callableWorkflows === null}
+                                                    >
+                                                        <option value="">
+                                                            {callableWorkflows === null
+                                                                ? "Loading workflows…"
+                                                                : callableWorkflows.length === 0
+                                                                  ? "No workflows with a public function yet"
+                                                                  : "Select a workflow…"}
+                                                        </option>
+                                                        {callableWorkflows?.map((w) => (
+                                                            <option key={w._id} value={w._id}>
+                                                                {w.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="call-function">Function</Label>
+                                                <select
+                                                    id="call-function"
+                                                    value={selectedNode.data?.functionId ?? ""}
+                                                    onChange={(e) => {
+                                                        const fn = functionOptions.find((f) => f.id === e.target.value);
+                                                        updateNodeDataMulti(selectedNode.id, {
+                                                            functionId: e.target.value,
+                                                            functionName: fn?.name ?? "",
+                                                        });
+                                                    }}
+                                                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                    disabled={scope === "external" && !selectedNode.data?.workflowId}
+                                                >
+                                                    <option value="">
+                                                        {scope === "internal"
+                                                            ? internalFunctions.length === 0
+                                                                ? "No Function steps in this workflow"
+                                                                : "Select a function…"
+                                                            : !selectedNode.data?.workflowId
+                                                              ? "Select a workflow first"
+                                                              : functionOptions.length === 0
+                                                                ? "No public functions"
+                                                                : "Select a function…"}
+                                                    </option>
+                                                    {functionOptions.map((f) => (
+                                                        <option key={f.id} value={f.id}>
+                                                            {f.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                            {(selectedNode.type === "route" || selectedNode.type === "forward") &&
+                                (() => {
+                                    const workflowOptions = Array.from(new Map((webhookTargets ?? []).map((t) => [t.workflowId, t.workflowName])).entries()).map(
+                                        ([id, name]) => ({ id, name }),
+                                    );
+                                    const hooksForWorkflow = (webhookTargets ?? []).filter((t) => t.workflowId === selectedNode.data?.workflowId);
+
+                                    return (
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="target-workflow">Workflow</Label>
+                                                <select
+                                                    id="target-workflow"
+                                                    value={selectedNode.data?.workflowId ?? ""}
+                                                    onChange={(e) => {
+                                                        const opt = workflowOptions.find((w) => w.id === e.target.value);
+                                                        updateNodeDataMulti(selectedNode.id, {
+                                                            workflowId: e.target.value,
+                                                            workflowName: opt?.name ?? "",
+                                                            webhookNodeId: "",
+                                                            webhookPath: "",
+                                                        });
+                                                    }}
+                                                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                    disabled={webhookTargets === null}
+                                                >
+                                                    <option value="">
+                                                        {webhookTargets === null
+                                                            ? "Loading workflows…"
+                                                            : workflowOptions.length === 0
+                                                              ? "No workflows with a webhook yet"
+                                                              : "Select a workflow…"}
+                                                    </option>
+                                                    {workflowOptions.map((w) => (
+                                                        <option key={w.id} value={w.id}>
+                                                            {w.id === workflow._id ? `${w.name} (this workflow)` : w.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="target-webhook">Webhook step</Label>
+                                                <select
+                                                    id="target-webhook"
+                                                    value={selectedNode.data?.webhookNodeId ?? ""}
+                                                    onChange={(e) => {
+                                                        const hook = hooksForWorkflow.find((h) => h.nodeId === e.target.value);
+                                                        updateNodeDataMulti(selectedNode.id, {
+                                                            webhookNodeId: e.target.value,
+                                                            webhookPath: hook?.path ?? "",
+                                                        });
+                                                    }}
+                                                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                    disabled={!selectedNode.data?.workflowId}
+                                                >
+                                                    <option value="">
+                                                        {!selectedNode.data?.workflowId ? "Select a workflow first" : "Select a webhook step…"}
+                                                    </option>
+                                                    {hooksForWorkflow.map((h) => (
+                                                        <option key={h.nodeId} value={h.nodeId}>
+                                                            {h.method} /{h.path}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                            {selectedNode.type === "view" &&
+                                (() => {
+                                    const layoutScope = selectedNode.data?.layoutScope === "external" ? "external" : "internal";
+                                    const internalFunctions = nodes
+                                        .filter((n) => n.type === "function")
+                                        .map((n) => ({ id: n.id, name: n.data?.name ? String(n.data.name) : "Untitled function" }));
+                                    const externalLayoutWorkflow = callableWorkflows?.find((w) => w._id === selectedNode.data?.layoutWorkflowId);
+                                    const layoutFunctionOptions = layoutScope === "internal" ? internalFunctions : externalLayoutWorkflow?.functions ?? [];
+                                    const hasLayout = !!selectedNode.data?.layoutFunctionId;
+
+                                    return (
+                                        <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-neutral-900">Wrap in a shared layout</p>
+                                                <p className="text-xs text-neutral-500">
+                                                    Instead of rendering as its own page, this View's blocks are handed to a Function step — build the
+                                                    shared layout once as its own View (Navbar, Footer, etc.) with a Function wired into it as a content
+                                                    slot, then point every page here. Leave unset to render this View as its own page.
+                                                </p>
+                                            </div>
+
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="view-layout-scope">Layout function</Label>
+                                                <select
+                                                    id="view-layout-scope"
+                                                    value={hasLayout ? layoutScope : "none"}
+                                                    onChange={(e) => {
+                                                        if (e.target.value === "none") {
+                                                            updateNodeDataMulti(selectedNode.id, {
+                                                                layoutScope: "internal",
+                                                                layoutWorkflowId: "",
+                                                                layoutWorkflowName: "",
+                                                                layoutFunctionId: "",
+                                                                layoutFunctionName: "",
+                                                            });
+                                                            return;
+                                                        }
+                                                        updateNodeDataMulti(selectedNode.id, {
+                                                            layoutScope: e.target.value,
+                                                            layoutWorkflowId: "",
+                                                            layoutWorkflowName: "",
+                                                            layoutFunctionId: "",
+                                                            layoutFunctionName: "",
+                                                        });
+                                                    }}
+                                                    className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                >
+                                                    <option value="none">None — render as its own page</option>
+                                                    <option value="internal">A function in this workflow</option>
+                                                    <option value="external">A function in another workflow</option>
+                                                </select>
+                                            </div>
+
+                                            {hasLayout && layoutScope === "external" && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Label htmlFor="view-layout-workflow">Workflow</Label>
+                                                    <select
+                                                        id="view-layout-workflow"
+                                                        value={selectedNode.data?.layoutWorkflowId ?? ""}
+                                                        onChange={(e) => {
+                                                            const wf = callableWorkflows?.find((w) => w._id === e.target.value);
+                                                            updateNodeDataMulti(selectedNode.id, {
+                                                                layoutWorkflowId: e.target.value,
+                                                                layoutWorkflowName: wf?.name ?? "",
+                                                                layoutFunctionId: "",
+                                                                layoutFunctionName: "",
+                                                            });
+                                                        }}
+                                                        className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                        disabled={callableWorkflows === null}
+                                                    >
+                                                        <option value="">
+                                                            {callableWorkflows === null
+                                                                ? "Loading workflows…"
+                                                                : callableWorkflows.length === 0
+                                                                  ? "No workflows with a public function yet"
+                                                                  : "Select a workflow…"}
+                                                        </option>
+                                                        {callableWorkflows?.map((w) => (
+                                                            <option key={w._id} value={w._id}>
+                                                                {w.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {hasLayout && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Label htmlFor="view-layout-function">Function</Label>
+                                                    <select
+                                                        id="view-layout-function"
+                                                        value={selectedNode.data?.layoutFunctionId ?? ""}
+                                                        onChange={(e) => {
+                                                            const fn = layoutFunctionOptions.find((f) => f.id === e.target.value);
+                                                            updateNodeDataMulti(selectedNode.id, {
+                                                                layoutFunctionId: e.target.value,
+                                                                layoutFunctionName: fn?.name ?? "",
+                                                            });
+                                                        }}
+                                                        className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                        disabled={layoutScope === "external" && !selectedNode.data?.layoutWorkflowId}
+                                                    >
+                                                        <option value="">
+                                                            {layoutScope === "internal"
+                                                                ? internalFunctions.length === 0
+                                                                    ? "No Function steps in this workflow"
+                                                                    : "Select a function…"
+                                                                : !selectedNode.data?.layoutWorkflowId
+                                                                  ? "Select a workflow first"
+                                                                  : layoutFunctionOptions.length === 0
+                                                                    ? "No public functions"
+                                                                    : "Select a function…"}
+                                                        </option>
+                                                        {layoutFunctionOptions.map((f) => (
+                                                            <option key={f.id} value={f.id}>
+                                                                {f.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
                             {selectedNode.type === "view" &&
                                 (() => {
                                     const layout = parseViewLayout(selectedNode.data?.layout);
@@ -728,11 +1039,12 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                             <div>
                                                 <p className="text-sm font-semibold text-neutral-900">Layout</p>
                                                 <p className="text-xs text-neutral-500">
-                                                    Connect a Menu, Tabs, Navbar, Footer, Table, Input Form, Page, Gap, or another View into this step,
-                                                    then drag it below to place it on the page — a 12-column grid. Drag a block's right edge to resize it.{" "}
-                                                    <span className="font-medium text-neutral-600">Scrolls</span> is a normal page that scrolls with its
-                                                    content; <span className="font-medium text-neutral-600">Full screen</span> fills the browser window,
-                                                    like an app screen.
+                                                    Connect a Menu, Tabs, Navbar, Footer, Table, Input Form, Page, Gap, Function, or another View into
+                                                    this step, then drag it below to place it on the page — a 12-column grid. Drag a block's right edge
+                                                    to resize it. A connected Function starts out as an empty slot and fills in with whatever it produced
+                                                    once something calls it. <span className="font-medium text-neutral-600">Scrolls</span> is a normal
+                                                    page that scrolls with its content; <span className="font-medium text-neutral-600">Full screen</span>{" "}
+                                                    fills the browser window, like an app screen.
                                                 </p>
                                             </div>
 

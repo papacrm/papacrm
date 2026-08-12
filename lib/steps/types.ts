@@ -86,6 +86,28 @@ export interface StepContext {
     // Set-Cookie instructions queued by Set Cookie steps
     // (lib/steps/setCookie.ts), applied the same way.
     setCookies: SetCookieInstruction[];
+    // Content produced by a Call step (lib/steps/call.ts), keyed by the
+    // called Function node's id. A View that has a Function wired into it
+    // (see EMBEDDABLE_TYPES in lib/steps/view.ts) renders an empty "slot"
+    // block for it by default — if that same function was actually called
+    // earlier in this run, the slot is filled with whatever's recorded
+    // here instead. Shared across branches, same as `body`.
+    slotContent: Record<string, string>;
+    // Same idea as `slotContent`, but a whole nested block layout instead
+    // of plain text — set by lib/steps/call.ts, right before it starts a
+    // sub-run, when the Call step it's running for is itself fed by a
+    // View (see `viewOutput` below). Keyed by the called Function node's
+    // id, read back in lib/steps/view.ts's resolveChildren.
+    slotBlocks: Record<string, unknown[]>;
+    // A View that chains into something other than another View (e.g. a
+    // Call step) renders its own blocks right there instead of just
+    // forwarding — see lib/steps/view.ts — and stashes them here, keyed by
+    // its own node id, so a Call step reached right after it (see
+    // lib/steps/call.ts) can pass them along to whatever Function it
+    // calls. This is how "View → Call (a layout's Function)" ends up
+    // rendering the View's content inside that shared layout instead of
+    // as its own page.
+    viewOutput: Record<string, { title: string; blocks: unknown[] }>;
 }
 
 export type StepOutcome =

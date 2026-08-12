@@ -1,24 +1,5 @@
-import { findOwnedListByName, listDocumentsForList } from "./listData";
-import { nextEdgeTargets, readPath, renderTemplate, type StepExecutor } from "./types";
-
-// A single, simple condition — "for now": one field, one operator, one
-// value. Same operator set as the Condition step. Matches against the
-// document's `data.<field>`, mirroring how Condition/renderTemplate reads
-// values elsewhere in this folder.
-function matchesWhere(doc: { data: Record<string, any> }, field: string, operator: string, value: string): boolean {
-    if (!field) return true;
-    const haystack = readPath(doc.data, field);
-
-    switch (operator) {
-        case "notEquals":
-            return String(haystack ?? "") !== value;
-        case "contains":
-            return typeof haystack === "string" && haystack.includes(value);
-        case "equals":
-        default:
-            return String(haystack ?? "") === value;
-    }
-}
+import { findOwnedListByName, listDocumentsForList, matchesWhere } from "./listData";
+import { nextEdgeTargets, renderTemplate, type StepExecutor } from "./types";
 
 const queryStep: StepExecutor = {
     async run({ node, ctx, edges }) {

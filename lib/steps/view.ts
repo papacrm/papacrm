@@ -5,10 +5,13 @@ import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } 
 
 // Node types that can be wired into a View and shown as a block inside it:
 // Menu, Tabs, Navbar, Footer, Table, Input Form, Page (Static Page), Gap,
-// or another View. See resolveChildren below and the matching UI in
+// a Function (rendered as an empty "slot" — see the "function" case
+// below), or another View — a View wired into a View is just another
+// block, laid out and resized the same as any of the others. See
+// resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap", "function"]);
 
 // A View that itself contains another View can't recurse forever — a
 // person could otherwise wire View A into View B and View B back into
@@ -40,7 +43,22 @@ export type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] };
+    | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
+    // A Function wired into a View — a placeholder that's filled in one of
+    // two ways, checked in that order:
+    //  1. `blocks` — a whole nested layout, set when this Function was
+    //     called by a Call step that was itself fed by a View (a "View →
+    //     Call" edge — see lib/steps/call.ts and ctx.viewOutput in
+    //     ./types.ts) — that View's own blocks render right here, in
+    //     place of the slot, instead of the View rendering as its own
+    //     page. This is how a shared layout (Function → View, with the
+    //     Function wired in as this slot) gets reused across pages: point
+    //     each page's View at a Call step that calls this Function.
+    //  2. `content` — plain text, set when this same Function was called
+    //     by an ordinary Call step not fed by a View (ctx.slotContent).
+    // Neither set (both null/undefined) means this Function hasn't been
+    // called yet this run — a genuinely empty placeholder.
+    | { type: "slot"; pos: ViewBlockPosition; name: string; content: string | null; blocks?: ViewBlock[] };
 
 function parseLayout(node: IWorkflowNode): Record<string, Partial<ViewBlockPosition>> {
     try {
@@ -129,6 +147,11 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
         } else if (child.type === "gap") {
             const size = Number(child.data?.size);
             blocks.push({ type: "gap", pos, size: Number.isFinite(size) && size > 0 ? size : 48 });
+        } else if (child.type === "function") {
+            const name = String(child.data?.name ?? "") || "Function";
+            const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
+            const content = Object.prototype.hasOwnProperty.call(ctx.slotContent, child.id) ? ctx.slotContent[child.id] : null;
+            blocks.push({ type: "slot", pos, name, content, blocks: slotBlocks });
         }
     }
 
@@ -137,6 +160,20 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
 
 const viewStep: StepExecutor = {
     async run({ node, ctx, edges, nodes }) {
+        // A View that's chained into another View (its output wired into
+        // that View's input — the very same edge that makes it show up as
+        // a block in that View's Layout, see resolveChildren above) acts
+        // as part of that View rather than rendering as a page of its
+        // own: follow the chain instead of finishing here. Whichever View
+        // is actually the *last* one in the chain is the one that
+        // renders — and it pulls this View back in as a nested block via
+        // resolveChildren, so nothing connected to it is lost, it's just
+        // no longer its own separate page.
+        const nextNodeIds = nextEdgeTargets(node, edges);
+        if (nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "view")) {
+            return { done: false, nextNodeIds };
+        }
+
         // A View has no path or submission handling of its own — an
         // embedded Input Form's own submission resumes at *that* node
         // (matched by its own id via the request's `__step` field, same
@@ -149,6 +186,17 @@ const viewStep: StepExecutor = {
         // title/browser tab, not just a fixed string.
         const title = renderTemplate(String(node.data?.title ?? "Page"), ctx);
         const blocks = await resolveChildren(node, nodes, edges, ctx, 0);
+
+        if (nextNodeIds.length > 0) {
+            // Chained into something other than a View — most commonly a
+            // Call step that calls a shared layout's Function (see the
+            // "slot" doc on ViewBlock above and lib/steps/call.ts). Stash
+            // this View's own rendered output, keyed by its own id, then
+            // keep going instead of answering with it directly — whatever
+            // this chains into decides what actually becomes the response.
+            ctx.viewOutput[node.id] = { title, blocks };
+            return { done: false, nextNodeIds };
+        }
 
         return {
             done: true,

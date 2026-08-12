@@ -9,9 +9,28 @@ const functionStep: WorkflowNodeDef = {
     // starts) but it's never reachable at a public URL: only a Call step
     // naming this workflow can start a run here. See lib/steps/function.ts.
     kind: "trigger",
-    fields: [{ key: "description", label: "Description (optional)", kind: "text", placeholder: "What does this workflow do when called?" }],
-    defaultData: () => ({ description: "" }),
-    summarize: (data) => (data?.description ? String(data.description) : "Callable from another workflow"),
+    fields: [
+        { key: "name", label: "Name", kind: "text", placeholder: "sendWelcomeEmail" },
+        {
+            key: "visibility",
+            label: "Visibility",
+            kind: "select",
+            // Private functions can only be reached by a Call step inside
+            // the same workflow ("A function in this workflow"). Public
+            // functions can also be reached by Call steps in *other*
+            // workflows — see app/router/workflows.ts (listCallable) and
+            // lib/steps/call.ts, which both gate on this field.
+            options: [
+                { value: "private", label: "Private — only callable from this workflow" },
+                { value: "public", label: "Public — callable from other workflows too" },
+            ],
+        },
+    ],
+    defaultData: () => ({ name: "", visibility: "private" }),
+    summarize: (data) => {
+        const name = data?.name ? String(data.name) : "Unnamed function";
+        return `${name} · ${data?.visibility === "public" ? "Public" : "Private"}`;
+    },
 };
 
 export default functionStep;

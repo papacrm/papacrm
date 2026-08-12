@@ -1,6 +1,6 @@
 import { requestOtp, verifyOtp } from "./otp";
 import { refresh, logout, me } from "./session";
-import { list, get, create, update, remove } from "./workflows";
+import { list, get, create, update, remove, listCallable, listWebhooks } from "./workflows";
 import { list as listList, get as listGet, create as listCreate, update as listUpdate, remove as listRemove } from "./lists";
 import {
     list as listDocumentList,
@@ -24,6 +24,8 @@ export const router = {
         create,
         update,
         remove,
+        listCallable,
+        listWebhooks,
     },
     list: {
         list: listList,

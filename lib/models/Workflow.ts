@@ -14,6 +14,9 @@ export type WorkflowNodeType =
     | "mapper"
     | "function"
     | "call"
+    | "route"
+    | "forward"
+    | "findOne"
     | "table"
     | "container"
     | "query"
@@ -76,6 +79,9 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "mapper",
                 "function",
                 "call",
+                "route",
+                "forward",
+                "findOne",
                 "table",
                 "container",
                 "query",

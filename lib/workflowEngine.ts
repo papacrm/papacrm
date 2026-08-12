@@ -23,6 +23,13 @@ export async function runWorkflow(
     // started by a Call step — never passed by a real webhook/function
     // trigger, which always starts fresh at depth 0.
     callDepth = 0,
+    // Set by lib/steps/call.ts when the Call step starting this sub-run
+    // was itself fed by a View (see ctx.viewOutput in ./steps/types.ts) —
+    // pre-fills ctx.slotBlocks so the called Function's own id already
+    // resolves to that View's blocks by the time the Function forwards
+    // into whatever View embeds it as a slot. Never passed by a real
+    // webhook/function trigger.
+    initialSlotBlocks: Record<string, unknown[]> = {},
 ): Promise<WorkflowResult> {
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
     // Shared across every branch of the run, including parallel ones — a
@@ -30,7 +37,17 @@ export async function runWorkflow(
     // node downstream, on every branch, sees that update. This is the
     // "context between steps" that lets a page later in the chain read a
     // value someone typed into a form earlier in the chain.
-    const ctx: StepContext = { query: trigger.query, body: trigger.body, workflowId, callDepth, responseHeaders: {}, setCookies: [] };
+    const ctx: StepContext = {
+        query: trigger.query,
+        body: trigger.body,
+        workflowId,
+        callDepth,
+        responseHeaders: {},
+        setCookies: [],
+        slotContent: {},
+        slotBlocks: { ...initialSlotBlocks },
+        viewOutput: {},
+    };
     let stepsRun = 0;
 
     // A form submission (see lib/steps/inputForm.ts / WebhookInputForm.tsx)

@@ -10,6 +10,9 @@ import saveToListStep from "./saveToList";
 import mapperStep from "./mapper";
 import functionStep from "./function";
 import callStep from "./call";
+import routeStep from "./route";
+import forwardStep from "./forward";
+import findOneStep from "./findOne";
 import tableStep from "./table";
 import containerStep from "./container";
 import queryStep from "./query";
@@ -46,6 +49,9 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     mapper: mapperStep,
     function: functionStep,
     call: callStep,
+    route: routeStep,
+    forward: forwardStep,
+    findOne: findOneStep,
     table: tableStep,
     container: containerStep,
     query: queryStep,

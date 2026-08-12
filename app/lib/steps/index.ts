@@ -9,6 +9,9 @@ import saveToListStep from "./saveToList";
 import mapperStep from "./mapper";
 import functionStep from "./function";
 import callStep from "./call";
+import routeStep from "./route";
+import forwardStep from "./forward";
+import findOneStep from "./findOne";
 import tableStep from "./table";
 import containerStep from "./container";
 import queryStep from "./query";
@@ -46,6 +49,9 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     mapper: mapperStep,
     function: functionStep,
     call: callStep,
+    route: routeStep,
+    forward: forwardStep,
+    findOne: findOneStep,
     table: tableStep,
     container: containerStep,
     query: queryStep,
@@ -70,7 +76,10 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "inputForm",
     "httpRequest",
     "call",
+    "route",
+    "forward",
     "query",
+    "findOne",
     "condition",
     "mapper",
     "staticPage",

@@ -6,9 +6,13 @@ const gapStep: WorkflowNodeDef = {
     description: "Empty space — connect it into a View to add breathing room between blocks",
     color: "#a8a29e",
     kind: "action",
-    fields: [{ key: "size", label: "Height (px)", kind: "text", placeholder: "48" }],
+    // No configurable height field — a Gap is a fixed-size spacer (see
+    // lib/steps/view.ts on the server, which falls back to 48px whenever
+    // `data.size` isn't set). Resize by row/span in the View's Layout
+    // designer instead, same as any other block.
+    fields: [],
     defaultData: () => ({ size: "48" }),
-    summarize: (data) => `${data?.size || "48"}px`,
+    summarize: () => "Fixed spacing",
 };
 
 export default gapStep;

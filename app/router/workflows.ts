@@ -66,6 +66,52 @@ export const list = authed.handler(async ({ context }) => {
     return workflows.map(serializeWorkflow);
 });
 
+// Backs the Call step's "another workflow" picker in the editor. Only
+// workflows that (a) have no Webhook step at all — those are treated as
+// request-handling workflows, not callable function libraries — and (b)
+// have at least one *public* Function step are returned, and only the
+// public functions are listed for each. Private functions never leave the
+// server via this endpoint.
+export const listCallable = authed.handler(async ({ context }) => {
+    await connectDB();
+    const workflows = await Workflow.find({ owner: context.user._id }).select("name nodes").lean();
+
+    return workflows
+        .map((w) => {
+            const nodes = (w as any).nodes ?? [];
+            if (nodes.some((n: any) => n.type === "webhook")) return null;
+
+            const functions = nodes
+                .filter((n: any) => n.type === "function" && n.data?.visibility === "public")
+                .map((n: any) => ({ id: n.id as string, name: String(n.data?.name || "Untitled function") }));
+            if (functions.length === 0) return null;
+
+            return { _id: String(w._id), name: w.name as string, functions };
+        })
+        .filter((w): w is { _id: string; name: string; functions: { id: string; name: string }[] } => w !== null);
+});
+
+// Backs the Route and Forward steps' "webhook to target" picker. Flat list
+// of every Webhook step across the person's own workflows — Function steps
+// are never included, since those two steps are specifically about
+// jumping to another *URL-triggered* entry point, not calling a function.
+export const listWebhooks = authed.handler(async ({ context }) => {
+    await connectDB();
+    const workflows = await Workflow.find({ owner: context.user._id }).select("name nodes").lean();
+
+    return workflows.flatMap((w) =>
+        ((w as any).nodes ?? [])
+            .filter((n: any) => n.type === "webhook")
+            .map((n: any) => ({
+                workflowId: String(w._id),
+                workflowName: w.name as string,
+                nodeId: n.id as string,
+                path: String(n.data?.path || ""),
+                method: String(n.data?.method || "GET"),
+            })),
+    );
+});
+
 export const get = authed.handler(async ({ input, context }) => {
     const id = String((input as any)?.id ?? "");
     if (!OBJECT_ID_RE.test(id)) {
