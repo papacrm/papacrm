@@ -15,7 +15,7 @@ const viewStep: WorkflowNodeDef = {
     description: "A page you build visually from connected blocks — Menu, Tabs, Navbar, Footer, Table, Input Form, or another View",
     color: "#7c2d12",
     kind: "terminal",
-    fields: [{ key: "title", label: "Page title", kind: "text", placeholder: "My Page" }],
+    fields: [{ key: "title", label: "Page title — use {{field}} for data from an earlier step", kind: "text", placeholder: "{{title}}" }],
     defaultData: () => ({ title: "My Page", layout: "{}" }),
     summarize: (data) => (data?.title ? String(data.title) : "Untitled page"),
 };

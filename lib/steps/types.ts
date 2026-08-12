@@ -196,16 +196,18 @@ export function renderTemplate(template: string, ctx: StepContext): string {
     });
 }
 
-// Same {{field}} templating as renderTemplate, applied to every string
-// value of a plain object — non-string values (numbers, booleans, nested
-// objects/arrays) pass through unchanged. Used by steps that build a JSON
-// object from earlier context, e.g. JWT Sign's payload — see
-// lib/steps/jwtSign.ts. (Mirrors Mapper's own inline version in
-// mapper.ts — kept separate there since it predates this helper.)
-export function renderTemplateValues(obj: Record<string, unknown>, ctx: StepContext): Record<string, any> {
-    const out: Record<string, any> = {};
-    for (const [key, value] of Object.entries(obj)) {
-        out[key] = typeof value === "string" ? renderTemplate(value, ctx) : value;
+// Same {{field}} templating as renderTemplate, applied recursively through
+// a JSON value — arrays and nested objects are walked, every string leaf
+// is templated, everything else (numbers, booleans, null) passes through
+// unchanged. Used by JSON Response, whose body can be an arbitrarily
+// nested object or array — see lib/steps/json.ts.
+export function renderTemplateDeep(value: unknown, ctx: StepContext): any {
+    if (typeof value === "string") return renderTemplate(value, ctx);
+    if (Array.isArray(value)) return value.map((item) => renderTemplateDeep(item, ctx));
+    if (value && typeof value === "object") {
+        const out: Record<string, any> = {};
+        for (const [key, v] of Object.entries(value)) out[key] = renderTemplateDeep(v, ctx);
+        return out;
     }
-    return out;
+    return value;
 }

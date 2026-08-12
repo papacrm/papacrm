@@ -28,7 +28,8 @@ export type WorkflowNodeType =
     | "navbar"
     | "footer"
     | "view"
-    | "gap";
+    | "gap"
+    | "json";
 
 export interface IWorkflowNode {
     id: string;
@@ -90,6 +91,7 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "footer",
                 "view",
                 "gap",
+                "json",
             ],
         },
         x: { type: Number, required: true, default: 0 },

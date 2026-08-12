@@ -24,6 +24,7 @@ import navbarStep from "./navbar";
 import footerStep from "./footer";
 import viewStep from "./view";
 import gapStep from "./gap";
+import jsonStep from "./json";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -60,6 +61,7 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     footer: footerStep,
     view: viewStep,
     gap: gapStep,
+    json: jsonStep,
 };
 
 export const NODE_ORDER: WorkflowNodeType[] = [
@@ -72,6 +74,7 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "condition",
     "mapper",
     "staticPage",
+    "json",
     "view",
     "menu",
     "tabs",

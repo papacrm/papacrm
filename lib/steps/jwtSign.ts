@@ -1,8 +1,8 @@
 import { encode } from "@kav3/jwt";
-import { nextEdgeTargets, renderTemplateValues, type StepExecutor } from "./types";
+import { nextEdgeTargets, renderTemplateDeep, type StepExecutor } from "./types";
 
 // Signs a JSON payload (every string value run through the usual
-// {{field}} templating — see renderTemplateValues) with a secret read from
+// {{field}} templating — see renderTemplateDeep) with a secret read from
 // an env var named on the node, and folds the resulting token string into
 // ctx.body under `as` so a later step (e.g. Set Cookie, or a Page/HTTP
 // Request response) can use it. Same env-var-by-name approach as JWT
@@ -13,7 +13,7 @@ const jwtSignStep: StepExecutor = {
         try {
             const raw = JSON.parse(node.data?.payload ?? "{}");
             if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-                payload = renderTemplateValues(raw, ctx);
+                payload = renderTemplateDeep(raw, ctx);
             }
         } catch {
             // Malformed JSON in the payload field — sign an empty payload

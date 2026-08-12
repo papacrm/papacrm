@@ -121,7 +121,7 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             });
         } else if (child.type === "view") {
             const nestedBlocks = await resolveChildren(child, nodes, edges, ctx, depth + 1);
-            blocks.push({ type: "view", pos, title: String(child.data?.title ?? ""), blocks: nestedBlocks });
+            blocks.push({ type: "view", pos, title: renderTemplate(String(child.data?.title ?? ""), ctx), blocks: nestedBlocks });
         } else if (child.type === "staticPage") {
             const pageTitle = String(child.data?.title ?? "");
             const html = renderTemplate(String(child.data?.html ?? ""), ctx);
@@ -144,7 +144,10 @@ const viewStep: StepExecutor = {
         // runs, and then follows its own outgoing edge back to this View
         // to re-render the page. So by the time this View's own run() is
         // called, there's never a submission to fold in here.
-        const title = String(node.data?.title ?? "Page");
+        // Templated ({{field}}), same as the fields inside it — a View
+        // built from a list workflow can show e.g. {{item.name}} in its
+        // title/browser tab, not just a fixed string.
+        const title = renderTemplate(String(node.data?.title ?? "Page"), ctx);
         const blocks = await resolveChildren(node, nodes, edges, ctx, 0);
 
         return {

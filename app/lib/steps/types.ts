@@ -28,7 +28,8 @@ export type WorkflowNodeType =
     | "navbar"
     | "footer"
     | "view"
-    | "gap";
+    | "gap"
+    | "json";
 
 export interface WorkflowNode {
     id: string;
