@@ -32,7 +32,10 @@ export type WorkflowNodeType =
     | "footer"
     | "view"
     | "gap"
-    | "json";
+    | "json"
+    | "html"
+    | "css"
+    | "state";
 
 export interface IWorkflowNode {
     id: string;
@@ -98,6 +101,9 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "view",
                 "gap",
                 "json",
+                "html",
+                "css",
+                "state",
             ],
         },
         x: { type: Number, required: true, default: 0 },

@@ -47,6 +47,9 @@ export async function runWorkflow(
         slotContent: {},
         slotBlocks: { ...initialSlotBlocks },
         viewOutput: {},
+        htmlAttrs: {},
+        clientStyles: [],
+        clientScripts: [],
     };
     let stepsRun = 0;
 
@@ -105,5 +108,8 @@ export async function runWorkflow(
         ...finalResult,
         headers: Object.keys(ctx.responseHeaders).length ? ctx.responseHeaders : finalResult.headers,
         cookies: ctx.setCookies.length ? ctx.setCookies : finalResult.cookies,
+        htmlAttrs: Object.keys(ctx.htmlAttrs).length ? ctx.htmlAttrs : finalResult.htmlAttrs,
+        styles: ctx.clientStyles.length ? ctx.clientStyles : finalResult.styles,
+        scripts: ctx.clientScripts.length ? ctx.clientScripts : finalResult.scripts,
     };
 }

@@ -32,7 +32,10 @@ export type WorkflowNodeType =
     | "footer"
     | "view"
     | "gap"
-    | "json";
+    | "json"
+    | "html"
+    | "css"
+    | "state";
 
 export interface WorkflowNode {
     id: string;

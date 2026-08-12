@@ -49,6 +49,15 @@ export interface WorkflowPage {
 interface WorkflowResultExtras {
     headers?: Record<string, string>;
     cookies?: SetCookieInstruction[];
+    // Queued by Html (lib/steps/html.ts) — applied to the rendered page's
+    // <html> element regardless of which step actually produces the page,
+    // same reasoning as headers/cookies above.
+    htmlAttrs?: { lang?: string; className?: string };
+    // Queued by Load CSS (lib/steps/css.ts) — raw <style> block contents.
+    styles?: string[];
+    // Queued by Html/Load CSS/State (lib/steps/state.ts) — raw inline
+    // <script> bodies, injected at the end of <body>.
+    scripts?: string[];
 }
 
 export interface SetCookieInstruction {
@@ -99,6 +108,17 @@ export interface StepContext {
     // View (see `viewOutput` below). Keyed by the called Function node's
     // id, read back in lib/steps/view.ts's resolveChildren.
     slotBlocks: Record<string, unknown[]>;
+    // Queued by Html (lib/steps/html.ts) — merged shallowly as each Html
+    // step runs, so a later Html step overrides an earlier one's lang/
+    // className but leaves the other untouched. Folded onto the final
+    // WorkflowResult the same way responseHeaders/setCookies are — see
+    // runWorkflow below.
+    htmlAttrs: { lang?: string; className?: string };
+    // Queued by Load CSS (lib/steps/css.ts) — one entry per step run.
+    clientStyles: string[];
+    // Queued by Load CSS and State (lib/steps/css.ts, lib/steps/state.ts)
+    // — raw inline <script> bodies, applied the same way.
+    clientScripts: string[];
     // A View that chains into something other than another View (e.g. a
     // Call step) renders its own blocks right there instead of just
     // forwarding — see lib/steps/view.ts — and stashes them here, keyed by

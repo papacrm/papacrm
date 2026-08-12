@@ -5,6 +5,7 @@ import { connectDB } from "../../lib/mongoose";
 import Workflow from "../../lib/models/Workflow";
 import { findWebhookNode, runWorkflow } from "../../lib/workflowEngine";
 import { WEBHOOK_PAGE_COMPONENTS } from "@/app/components/webhooks/registry";
+import { withPageExtras } from "@/app/components/webhooks/PageExtras";
 import RootLayout from "@/app/pages/layout";
 
 interface ApiRequest extends IncomingMessage {
@@ -110,7 +111,14 @@ async function handle(req: ApiRequest, res: ApiResponse) {
         // gets the app's shared RootLayout (stylesheet, favicon, title
         // template) and whatever reactivity the component itself wires up
         // via useHtml() (see app/components/webhooks/WebhookInputForm.tsx).
-        const Component = WEBHOOK_PAGE_COMPONENTS[result.page.component];
+        // withPageExtras applies whatever Html/Load CSS/State steps queued
+        // onto this run (see PageExtras.tsx) regardless of which page step
+        // actually produced `result`.
+        const Component = withPageExtras(WEBHOOK_PAGE_COMPONENTS[result.page.component], {
+            htmlAttrs: result.htmlAttrs,
+            styles: result.styles,
+            scripts: result.scripts,
+        });
         const html = await renderComponent(Component, result.page.props, {
             layouts: [RootLayout],
             url: req.url,

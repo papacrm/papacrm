@@ -29,6 +29,9 @@ import footerStep from "./footer";
 import viewStep from "./view";
 import gapStep from "./gap";
 import jsonStep from "./json";
+import htmlStep from "./html";
+import cssStep from "./css";
+import stateStep from "./state";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -68,6 +71,9 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     view: viewStep,
     gap: gapStep,
     json: jsonStep,
+    html: htmlStep,
+    css: cssStep,
+    state: stateStep,
 };
 
 export * from "./types";
