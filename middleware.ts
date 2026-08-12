@@ -219,6 +219,46 @@ if (isDev) {
     );
 }
 
+// ─── Vercel Routing Middleware: disabled ────────────────────────────────
+//
+// Vercel auto-detects any root-level middleware.ts and ALSO builds/runs it
+// as its own platform-level "Routing Middleware", entirely separately from
+// whatever nuke's own `build:vercel` step does with this same file (see
+// nukejs/dist/build-vercel.js, which already bundles this file's default
+// export into pages.func/api.func and calls it correctly as a Node
+// function with a real (req, res) pair on every request — see
+// middleware-loader.js / the `middlewareRun` snippet in build-vercel.js).
+//
+// That platform layer is pure trouble here:
+//   1. Its default runtime is Edge, which has no Node builtins (fs, net,
+//      tls, dns, child_process, ...) — mongoose/mongodb, the `cookie`
+//      package, and `jsonwebtoken` (via ./lib/jwt) can't even be bundled
+//      for it ("Edge Function 'middleware' is referencing unsupported
+//      modules").
+//   2. Even switched to `runtime: "nodejs"`, it transpiles this file in
+//      isolation rather than bundling it (unlike nuke's own esbuild step),
+//      so relative imports like "./lib/cookies" and
+//      "./app/components/webhooks/registry" are left unresolved for
+//      Node's strict ESM loader (ERR_MODULE_NOT_FOUND).
+//   3. Its call signature — `(request: Request, context: { waitUntil })` —
+//      isn't Node's (req: IncomingMessage, res: ServerResponse) anyway, so
+//      even a successful load would run the wrong code path and never
+//      reach the webhook/auth/locale logic below.
+//
+// nuke's own invocation already does everything this file needs correctly
+// (webhook dispatch, the /d auth guard, locale routing), so the platform
+// layer should simply never fire. `matcher` scopes which requests Vercel's
+// Routing Middleware runs on; pointed at a path nothing will ever request,
+// it never invokes this file, and the runtime setting below is just a
+// belt-and-suspenders fallback in case that ever changes. (This is
+// independent of, and in addition to, the vercel.json `buildCommand`
+// override — this guard still holds even if that setting is ever
+// misconfigured or overridden in the Vercel Dashboard.)
+export const config = {
+    runtime: "nodejs",
+    matcher: "/__vercel-routing-middleware-disabled__",
+};
+
 export default async function middleware(
     req: IncomingMessage,
     res: ServerResponse,
