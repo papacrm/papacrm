@@ -32,7 +32,7 @@ export interface WebhookTrigger {
 // React, no SSR calls in here) while still getting real NukeJS SSR —
 // `useHtml()`, layouts, etc. — for every workflow-rendered page, plus
 // automatic escaping (no more hand-rolled `escapeHtml`).
-export type WorkflowPageComponent = "staticPage" | "inputForm" | "table" | "container" | "view";
+export type WorkflowPageComponent = "staticPage" | "inputForm" | "table" | "container" | "view" | "listView" | "card";
 
 export interface WorkflowPage {
     title: string;

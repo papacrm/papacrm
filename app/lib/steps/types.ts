@@ -18,6 +18,8 @@ export type WorkflowNodeType =
     | "forward"
     | "findOne"
     | "table"
+    | "listView"
+    | "card"
     | "container"
     | "query"
     | "setCookie"

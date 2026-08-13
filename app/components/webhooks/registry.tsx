@@ -3,6 +3,8 @@ import type { WorkflowPageComponent } from "../../../lib/steps/types";
 import StaticPage from "./StaticPage";
 import InputFormPage from "./InputFormPage";
 import Table from "./Table";
+import ListView from "./ListView";
+import CardPage from "./Card";
 import Container from "./Container";
 import View from "./View";
 
@@ -16,6 +18,8 @@ export const WEBHOOK_PAGE_COMPONENTS: Record<WorkflowPageComponent, ComponentTyp
     staticPage: StaticPage,
     inputForm: InputFormPage,
     table: Table,
+    listView: ListView,
+    card: CardPage,
     container: Container,
     view: View,
 };

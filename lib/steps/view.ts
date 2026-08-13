@@ -1,17 +1,19 @@
 import type { IWorkflowNode, IWorkflowEdge } from "../models/Workflow";
+import { resolveCardItems, type CardItem } from "./card";
 import { parseFields } from "./inputForm";
-import { resolveRows } from "./table";
+import { resolveListItems, type ListViewItem } from "./listView";
+import { resolveRows, type TableField } from "./table";
 import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } from "./types";
 
 // Node types that can be wired into a View and shown as a block inside it:
-// Menu, Tabs, Navbar, Footer, Table, Input Form, Page (Static Page), Gap,
-// a Function (rendered as an empty "slot" — see the "function" case
-// below), or another View — a View wired into a View is just another
-// block, laid out and resized the same as any of the others. See
-// resolveChildren below and the matching UI in
+// Menu, Tabs, Navbar, Footer, Table, List View, Card, Input Form, Page
+// (Static Page), Gap, a Function (rendered as an empty "slot" — see the
+// "function" case below), or another View — a View wired into a View is
+// just another block, laid out and resized the same as any of the
+// others. See resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "inputForm", "staticPage", "gap", "function"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "function"]);
 
 // A View that itself contains another View can't recurse forever — a
 // person could otherwise wire View A into View B and View B back into
@@ -40,6 +42,8 @@ export type ViewBlock =
     | { type: "footer"; pos: ViewBlockPosition; text: string; links: { label: string; href: string }[] }
     | { type: "tabs"; pos: ViewBlockPosition; tabs: { label: string; html: string }[] }
     | { type: "table"; pos: ViewBlockPosition; fields: { key: string; label: string }[]; documents: { _id: string; data: Record<string, any> }[] }
+    | { type: "listView"; pos: ViewBlockPosition; title: string; fields: TableField[]; items: ListViewItem[] }
+    | { type: "card"; pos: ViewBlockPosition; title: string; fields: TableField[]; items: CardItem[] }
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
@@ -128,6 +132,12 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
         } else if (child.type === "table") {
             const { fields, documents } = resolveRows(ctx);
             blocks.push({ type: "table", pos, fields, documents });
+        } else if (child.type === "listView") {
+            const { fields, items } = resolveListItems(child, nodes, edges, ctx);
+            blocks.push({ type: "listView", pos, title: String(child.data?.title ?? ""), fields, items });
+        } else if (child.type === "card") {
+            const { fields, items } = resolveCardItems(child, ctx);
+            blocks.push({ type: "card", pos, title: String(child.data?.title ?? ""), fields, items });
         } else if (child.type === "inputForm") {
             blocks.push({
                 type: "form",

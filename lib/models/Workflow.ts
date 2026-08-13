@@ -18,6 +18,8 @@ export type WorkflowNodeType =
     | "forward"
     | "findOne"
     | "table"
+    | "listView"
+    | "card"
     | "container"
     | "query"
     | "setCookie"
@@ -86,6 +88,8 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "forward",
                 "findOne",
                 "table",
+                "listView",
+                "card",
                 "container",
                 "query",
                 "setCookie",

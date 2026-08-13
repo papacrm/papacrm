@@ -14,6 +14,8 @@ import routeStep from "./route";
 import forwardStep from "./forward";
 import findOneStep from "./findOne";
 import tableStep from "./table";
+import listViewStep from "./listView";
+import cardStep from "./card";
 import containerStep from "./container";
 import queryStep from "./query";
 import setCookieStep from "./setCookie";
@@ -56,6 +58,8 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     forward: forwardStep,
     findOne: findOneStep,
     table: tableStep,
+    listView: listViewStep,
+    card: cardStep,
     container: containerStep,
     query: queryStep,
     setCookie: setCookieStep,

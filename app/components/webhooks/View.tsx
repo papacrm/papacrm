@@ -4,6 +4,8 @@ import Navbar from "./Navbar";
 import Footer from "./Footer";
 import Tabs from "./Tabs";
 import ListTable from "./ListTable";
+import ListItems from "./ListItems";
+import CardGrid from "./CardGrid";
 import WebhookInputForm from "./WebhookInputForm";
 import type { InputFormField } from "../../../lib/steps/inputForm";
 
@@ -23,6 +25,20 @@ type ViewBlock =
     | { type: "footer"; pos: ViewBlockPosition; text: string; links: MenuLink[] }
     | { type: "tabs"; pos: ViewBlockPosition; tabs: { label: string; html: string }[] }
     | { type: "table"; pos: ViewBlockPosition; fields: { key: string; label: string }[]; documents: { _id: string; data: Record<string, any> }[] }
+    | {
+          type: "listView";
+          pos: ViewBlockPosition;
+          title: string;
+          fields: { key: string; label: string }[];
+          items: { _id: string; text: string; card?: { title: string; subtitle: string; body: string } }[];
+      }
+    | {
+          type: "card";
+          pos: ViewBlockPosition;
+          title: string;
+          fields: { key: string; label: string }[];
+          items: { _id: string; title: string; subtitle: string; body: string; data: Record<string, any> }[];
+      }
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
@@ -61,6 +77,18 @@ function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     {block.type === "footer" && <Footer text={block.text} links={block.links} />}
                     {block.type === "tabs" && <Tabs tabs={block.tabs} />}
                     {block.type === "table" && <ListTable fields={block.fields} documents={block.documents} />}
+                    {block.type === "listView" && (
+                        <>
+                            {block.title && <p className="mb-2 text-sm font-medium text-neutral-900">{block.title}</p>}
+                            <ListItems items={block.items} />
+                        </>
+                    )}
+                    {block.type === "card" && (
+                        <>
+                            {block.title && <p className="mb-2 text-sm font-medium text-neutral-900">{block.title}</p>}
+                            <CardGrid fields={block.fields} items={block.items} />
+                        </>
+                    )}
                     {block.type === "form" && (
                         <>
                             {block.title && <p className="mb-3 text-sm text-neutral-600">{block.title}</p>}
