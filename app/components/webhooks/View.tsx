@@ -42,6 +42,7 @@ type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
+    | { type: "label"; pos: ViewBlockPosition; text: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's empty until
     // something fills it. `blocks` wins when present (a View elsewhere
@@ -97,6 +98,7 @@ function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}
                     {block.type === "gap" && <div style={{ height: block.size }} aria-hidden="true" />}
+                    {block.type === "label" && <p className="text-neutral-700">{block.text}</p>}
                     {block.type === "slot" &&
                         (block.blocks && block.blocks.length > 0 ? (
                             // A View was routed through a Call step into

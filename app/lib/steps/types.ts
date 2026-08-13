@@ -37,7 +37,8 @@ export type WorkflowNodeType =
     | "json"
     | "html"
     | "css"
-    | "state";
+    | "state"
+    | "label";
 
 export interface WorkflowNode {
     id: string;

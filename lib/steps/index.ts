@@ -34,6 +34,7 @@ import jsonStep from "./json";
 import htmlStep from "./html";
 import cssStep from "./css";
 import stateStep from "./state";
+import labelStep from "./label";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -78,6 +79,7 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     html: htmlStep,
     css: cssStep,
     state: stateStep,
+    label: labelStep,
 };
 
 export * from "./types";

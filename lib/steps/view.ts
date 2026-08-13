@@ -13,7 +13,7 @@ import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } 
 // others. See resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "function"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "function"]);
 
 // A View that itself contains another View can't recurse forever — a
 // person could otherwise wire View A into View B and View B back into
@@ -47,6 +47,7 @@ export type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
+    | { type: "label"; pos: ViewBlockPosition; text: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -157,6 +158,9 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
         } else if (child.type === "gap") {
             const size = Number(child.data?.size);
             blocks.push({ type: "gap", pos, size: Number.isFinite(size) && size > 0 ? size : 48 });
+        } else if (child.type === "label") {
+            const text = renderTemplate(String(child.data?.field ?? ""), ctx);
+            blocks.push({ type: "label", pos, text });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
