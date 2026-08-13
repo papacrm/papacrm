@@ -52,7 +52,6 @@ export async function loadListTableData(listId: string, workflowId: string) {
     }
 
     const documents = await ListDocument.find({ list: listId, owner: (list as any).owner })
-        .sort({ createdAt: -1 })
         .limit(MAX_ROWS)
         .lean();
 
@@ -77,7 +76,6 @@ export async function findOwnedListByName(name: string, workflowId: string) {
 
 export async function listDocumentsForList(list: any) {
     const documents = await ListDocument.find({ list: list._id, owner: list.owner })
-        .sort({ createdAt: -1 })
         .limit(MAX_ROWS)
         .lean();
     return documents.map((d: any) => ({ _id: String(d._id), data: d.data ?? {}, createdAt: d.createdAt }));

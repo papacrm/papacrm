@@ -19,8 +19,7 @@ const findOneStep: StepExecutor = {
             const list = await findOwnedListByName(listName, ctx.workflowId);
             if (list) {
                 const all = await listDocumentsForList(list);
-                // No where field set: just take the first (most recent —
-                // listDocumentsForList sorts newest first) record in the
+                // No where field set: just take the first record in the
                 // list, same "no filter" behavior Query has for "all of".
                 found = whereField ? all.find((doc) => matchesWhere(doc, whereField, whereOperator, whereValue)) : all[0];
             }

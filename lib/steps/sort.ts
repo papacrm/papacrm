@@ -10,20 +10,28 @@ const sortStep: StepExecutor = {
             }
         })();
 
-        // Sort documents in ctx.body
-        if (Array.isArray(ctx.body) && Object.keys(sortSpec).length > 0) {
-            const [sortKey, sortOrder] = Object.entries(sortSpec)[0] as [string, number];
-            ctx.body = [...ctx.body].sort((a, b) => {
-                const aVal = a.data?.[sortKey];
-                const bVal = b.data?.[sortKey];
+        if (Object.keys(sortSpec).length === 0) {
+            return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
+        }
 
-                if (aVal === bVal) return 0;
-                if (aVal === undefined || aVal === null) return 1;
-                if (bVal === undefined || bVal === null) return -1;
+        const [sortKey, sortOrder] = Object.entries(sortSpec)[0] as [string, number];
+        const compareFn = (a: any, b: any) => {
+            const aVal = a.data?.[sortKey];
+            const bVal = b.data?.[sortKey];
 
-                const cmp = aVal < bVal ? -1 : 1;
-                return sortOrder === -1 ? -cmp : cmp;
-            });
+            if (aVal === bVal) return 0;
+            if (aVal === undefined || aVal === null) return 1;
+            if (bVal === undefined || bVal === null) return -1;
+
+            const cmp = aVal < bVal ? -1 : 1;
+            return sortOrder === -1 ? -cmp : cmp;
+        };
+
+        // Handle both array and { fields, documents } formats
+        if (Array.isArray(ctx.body)) {
+            ctx.body = [...ctx.body].sort(compareFn);
+        } else if (ctx.body && typeof ctx.body === "object" && Array.isArray(ctx.body.documents)) {
+            ctx.body.documents = [...ctx.body.documents].sort(compareFn);
         }
 
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
