@@ -14,6 +14,15 @@ const matchStep: StepExecutor = {
         if (Array.isArray(ctx.body)) {
             ctx.body = ctx.body.filter((doc) => {
                 for (const [key, value] of Object.entries(query)) {
+                    if (doc[key] !== value) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        } else if (ctx.body && typeof ctx.body === "object" && Array.isArray(ctx.body.documents)) {
+            ctx.body.documents = ctx.body.documents.filter((doc) => {
+                for (const [key, value] of Object.entries(query)) {
                     if (doc.data?.[key] !== value) {
                         return false;
                     }
