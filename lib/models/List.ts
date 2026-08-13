@@ -16,8 +16,8 @@ export interface IList extends Document {
     owner: Types.ObjectId;
     name: string;
     fields: IListField[];
-    createdAt: Date;
-    updatedAt: Date;
+    createdAt: number;
+    updatedAt: number;
 }
 
 const ListFieldSchema = new Schema<IListField>(
@@ -35,9 +35,14 @@ const ListSchema = new Schema<IList>(
         owner: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
         name: { type: String, required: true, trim: true },
         fields: { type: [ListFieldSchema], default: [] },
+        createdAt: { type: Number, default: Date.now },
+        updatedAt: { type: Number, default: Date.now },
     },
-    { timestamps: true },
 );
+
+ListSchema.pre("save", function () {
+    this.updatedAt = Date.now();
+});
 
 // Prevent model recompilation during hot reload
 const List: Model<IList> = mongoose.models.List ?? mongoose.model<IList>("List", ListSchema);
