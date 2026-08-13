@@ -85,7 +85,7 @@ export default function OtpStep({ email, expiresIn }: { email: string; expiresIn
         <Card className="w-full max-w-sm">
             <CardHeader>
                 <CardTitle>Enter the code</CardTitle>
-                <CardDescription>We sent a 6-digit code to {email}.</CardDescription>
+                <CardDescription>{`We sent a 6-digit code to ${email}.`}</CardDescription>
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
