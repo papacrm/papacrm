@@ -1,42 +1,55 @@
 import type { WorkflowNodeDef } from "./types";
 
-// A State node has one input handle like any other action, but reads it
-// two different ways depending on which side of the node, on the canvas,
-// the wire feeding it comes from:
-//   - a node positioned to the State node's LEFT (the normal, left-to-right
-//     chain direction) → STORE: the mapping's values are read from the
-//     current step data and written into the browser's persisted store.
-//   - a node positioned to the State node's RIGHT (the wire loops back)
-//     → RETRIEVE: the mapping's values are read back out of the store and
-//     written onto the page.
-// See lib/steps/state.ts for exactly how that's decided (by comparing x
-// positions), and https://nukejs.com/docs/state-management for
-// createPersistedStore itself, which this piggybacks on (same
-// `nuke-store:{name}` localStorage key), so the same store also works
-// with a real `useStore()`-based "use client" component elsewhere in the
-// app.
+// Stores data from the previous step into a NukeJS store
+// (https://nukejs.com/docs/state-management) in the visitor's browser,
+// using the given mapping — {"storeKey": "{{field}}"} — to pull values out
+// of whatever's in context so far. The resolved values are also added to the
+// workflow context, making them available to subsequent steps (e.g., a page
+// can access these values via {{storeKey}} template syntax).
+//
+// When State chains directly to a View (State → View), the View automatically
+// displays the state values as formatted JSON at the top of the page for
+// debugging.
+//
+// "Persisted" chooses which of NukeJS's two store constructors this
+// mirrors: Yes syncs to localStorage under the same `nuke-store:{name}` key
+// createPersistedStore uses (survives page refreshes); No writes straight
+// into window.__nukeStores the way createStore does (cleared on refresh).
+// Either way, a real createStore/createPersistedStore + useStore()
+// elsewhere in the app reads back whatever this step wrote.
 const stateStep: WorkflowNodeDef = {
     type: "state",
     label: "State",
     description:
-        "Reads/writes a NukeJS persisted store (createPersistedStore) in the visitor's browser. Wire a step in from the LEFT to store its data; wire one in from the RIGHT to retrieve stored data back onto the page.",
+        "Stores data into a NukeJS store and makes it available to subsequent steps. When chained to a View, auto-displays values as JSON.",
     color: "#7c3aed",
     kind: "action",
     fields: [
         { key: "store", label: "Store name", kind: "text", placeholder: "settings" },
         {
+            key: "persisted",
+            label: "Persisted",
+            kind: "select",
+            options: [
+                { value: "true", label: "Yes — survives page refresh (localStorage)" },
+                { value: "false", label: "No — cleared on refresh (memory only)" },
+            ],
+        },
+        {
             key: "mapping",
-            label: "Mapping (JSON) — storing: {\"storeKey\": \"{{field}}\"}. retrieving: {\"storeKey\": \"targetName\"}",
+            label: 'Mapping (JSON) — {"storeKey": "{{field}}"}',
             kind: "textarea",
             placeholder: '{"theme": "{{theme}}"}',
         },
     ],
-    defaultData: () => ({ store: "", mapping: JSON.stringify({ key: "{{field}}" }, null, 2) }),
+    defaultData: () => ({ store: "", persisted: "true", mapping: JSON.stringify({ key: "{{field}}" }, null, 2) }),
     summarize: (data) => {
         if (!data?.store) return "No store set";
+        const persisted = String(data?.persisted ?? "true") !== "false";
         try {
             const keys = Object.keys(JSON.parse(data?.mapping ?? "{}"));
-            return keys.length ? `${data.store}: ${keys.join(", ")}` : `${data.store} (no fields mapped)`;
+            const suffix = persisted ? "" : " (memory only)";
+            return keys.length ? `${data.store}: ${keys.join(", ")}${suffix}` : `${data.store} (no fields mapped)`;
         } catch {
             return `${data.store} (invalid mapping JSON)`;
         }

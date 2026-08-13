@@ -50,6 +50,7 @@ export async function runWorkflow(
         htmlAttrs: {},
         clientStyles: [],
         clientScripts: [],
+        stateDebugJson: undefined,
     };
     let stepsRun = 0;
 

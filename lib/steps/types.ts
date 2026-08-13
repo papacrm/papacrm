@@ -128,6 +128,10 @@ export interface StepContext {
     // rendering the View's content inside that shared layout instead of
     // as its own page.
     viewOutput: Record<string, { title: string; blocks: unknown[] }>;
+    // State debug output — when a State step chains directly to a View, it
+    // stores its resolved values here so the View can auto-inject a JSON
+    // display block. Cleared by the View after rendering.
+    stateDebugJson?: string;
 }
 
 export type StepOutcome =

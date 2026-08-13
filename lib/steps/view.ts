@@ -5,6 +5,15 @@ import { resolveListItems, type ListViewItem } from "./listView";
 import { resolveRows, type TableField } from "./table";
 import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } from "./types";
 
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // Node types that can be wired into a View and shown as a block inside it:
 // Menu, Tabs, Navbar, Footer, Table, List View, Card, Input Form, Page
 // (Static Page), Gap, a Function (rendered as an empty "slot" — see the
@@ -279,6 +288,19 @@ const viewStep: StepExecutor = {
         // title/browser tab, not just a fixed string.
         const title = renderTemplate(String(node.data?.title ?? "Page"), ctx);
         const blocks = await resolveChildren(node, nodes, edges, ctx, 0);
+
+        // If a State step chained directly to this View, auto-inject a JSON
+        // debug block at the top showing the state values
+        if (ctx.stateDebugJson) {
+            const debugBlock: ViewBlock = {
+                type: "page",
+                pos: { col: 0, span: 12, row: -1, height: "auto" },
+                title: "State Debug",
+                html: `<div style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;"><h3 style="margin: 0 0 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">State Values</h3><pre style="margin: 0; font-size: 0.875rem; color: #1f2937; overflow-x: auto;">${escapeHtml(ctx.stateDebugJson)}</pre></div>`,
+            };
+            blocks.unshift(debugBlock);
+            ctx.stateDebugJson = undefined; // Clear after use
+        }
 
         if (nextNodeIds.length > 0) {
             // Chained into something other than a View — most commonly a
