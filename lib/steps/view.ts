@@ -3,7 +3,7 @@ import { resolveCardItems, type CardItem } from "./card";
 import { parseFields } from "./inputForm";
 import { resolveListItems, type ListViewItem } from "./listView";
 import { resolveRows, type TableField } from "./table";
-import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } from "./types";
+import { nextEdgeTargets, readPath, renderTemplate, type StepContext, type StepExecutor } from "./types";
 
 function escapeHtml(text: string): string {
     return text
@@ -97,10 +97,10 @@ export type ViewBlock =
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
-    | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
-    | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string }
-    | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
-    | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
+    | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
+    | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -146,6 +146,23 @@ function parseLinks(raw: unknown): { label: string; href: string }[] {
     } catch {
         return [];
     }
+}
+
+// Resolves what an embedded Input block should show for `name`: a State
+// step's resolved values (ctx.stateValues, set only when a State step is
+// directly chained right before whatever's being rendered here — see
+// lib/steps/state.ts) win when present, since that's the explicit
+// "state -> input" hand-off; otherwise fall back to plain ctx.body, which
+// covers a value that arrived some other way (a webhook payload, an
+// upstream Input step forwarding what it was submitted, a re-rendered
+// form, ...). Either way this is only ever a first-paint guess — State's
+// own client-side script corrects it once the page loads with whatever's
+// actually persisted (see lib/steps/state.ts).
+function resolveInputValue(name: string, ctx: StepContext): unknown {
+    if (!name) return undefined;
+    const stateData = ctx.stateValues?.data;
+    if (stateData && Object.prototype.hasOwnProperty.call(stateData, name)) return stateData[name];
+    return readPath(ctx.body, name);
 }
 
 // Finds every node wired into `view` (an edge whose target is this View)
@@ -229,13 +246,24 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
 
             blocks.push({ type: "link", pos, href, text, blocks: linkBlocks });
         } else if (child.type === "textInput") {
-            blocks.push({ type: "textInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
+            const name = String(child.data?.name ?? "");
+            const value = resolveInputValue(name, ctx);
+            blocks.push({ type: "textInput", pos, name, label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? ""), value: value == null ? "" : String(value) });
         } else if (child.type === "checkboxInput") {
-            blocks.push({ type: "checkboxInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? "") });
+            const name = String(child.data?.name ?? "");
+            const value = resolveInputValue(name, ctx);
+            // Treat the common "falsy string" cases from a stored/mapped
+            // value ("false", "0", "") as unchecked, not just JS-falsy.
+            const checked = typeof value === "string" ? !["", "false", "0"].includes(value.toLowerCase()) : Boolean(value);
+            blocks.push({ type: "checkboxInput", pos, name, label: String(child.data?.label ?? ""), checked });
         } else if (child.type === "textareaInput") {
-            blocks.push({ type: "textareaInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
+            const name = String(child.data?.name ?? "");
+            const value = resolveInputValue(name, ctx);
+            blocks.push({ type: "textareaInput", pos, name, label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? ""), value: value == null ? "" : String(value) });
         } else if (child.type === "numberInput") {
-            blocks.push({ type: "numberInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
+            const name = String(child.data?.name ?? "");
+            const value = resolveInputValue(name, ctx);
+            blocks.push({ type: "numberInput", pos, name, label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? ""), value: value == null ? "" : String(value) });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
@@ -290,16 +318,22 @@ const viewStep: StepExecutor = {
         const blocks = await resolveChildren(node, nodes, edges, ctx, 0);
 
         // If a State step chained directly to this View, auto-inject a JSON
-        // debug block at the top showing the state values
-        if (ctx.stateDebugJson) {
+        // debug block at the top showing the state values. This is only
+        // this request's server-resolved guess — it's tagged with
+        // data-state-debug so State's own client-side hydration script can
+        // find it and overwrite it with the real, persisted-aware store
+        // contents once the page loads (see lib/steps/state.ts).
+        if (ctx.stateValues) {
+            const { nodeId, data } = ctx.stateValues;
+            const debugJson = JSON.stringify(data, null, 2);
             const debugBlock: ViewBlock = {
                 type: "page",
                 pos: { col: 0, span: 12, row: -1, height: "auto" },
                 title: "State Debug",
-                html: `<div style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;"><h3 style="margin: 0 0 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">State Values</h3><pre style="margin: 0; font-size: 0.875rem; color: #1f2937; overflow-x: auto;">${escapeHtml(ctx.stateDebugJson)}</pre></div>`,
+                html: `<div style="background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;"><h3 style="margin: 0 0 0.5rem; font-size: 0.875rem; font-weight: 600; color: #374151;">State Values</h3><pre data-state-debug="${escapeHtml(nodeId)}" style="margin: 0; font-size: 0.875rem; color: #1f2937; overflow-x: auto;">${escapeHtml(debugJson)}</pre></div>`,
             };
             blocks.unshift(debugBlock);
-            ctx.stateDebugJson = undefined; // Clear after use
+            ctx.stateValues = undefined; // Clear after use
         }
 
         if (nextNodeIds.length > 0) {

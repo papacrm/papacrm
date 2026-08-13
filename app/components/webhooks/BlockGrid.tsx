@@ -41,10 +41,10 @@ type ViewBlock =
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
-    | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
-    | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string }
-    | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
-    | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
+    | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
+    | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     | { type: "slot"; pos: ViewBlockPosition; name: string; content: string | null; blocks?: ViewBlock[] };
 
@@ -91,25 +91,25 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     {block.type === "textInput" && (
                         <div className="flex flex-col gap-1">
                             {block.label && <label htmlFor={block.name} className="text-sm font-medium text-neutral-700">{block.label}</label>}
-                            <input id={block.name} name={block.name} type="text" placeholder={block.placeholder} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
+                            <input id={block.name} name={block.name} type="text" defaultValue={block.value} placeholder={block.placeholder} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
                         </div>
                     )}
                     {block.type === "checkboxInput" && (
                         <label className="flex items-center gap-2">
-                            <input id={block.name} name={block.name} type="checkbox" className="h-4 w-4 rounded border-neutral-300" />
+                            <input id={block.name} name={block.name} type="checkbox" defaultChecked={block.checked} className="h-4 w-4 rounded border-neutral-300" />
                             <span className="text-sm text-neutral-700">{block.label}</span>
                         </label>
                     )}
                     {block.type === "textareaInput" && (
                         <div className="flex flex-col gap-1">
                             {block.label && <label htmlFor={block.name} className="text-sm font-medium text-neutral-700">{block.label}</label>}
-                            <textarea id={block.name} name={block.name} placeholder={block.placeholder} rows={4} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
+                            <textarea id={block.name} name={block.name} defaultValue={block.value} placeholder={block.placeholder} rows={4} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
                         </div>
                     )}
                     {block.type === "numberInput" && (
                         <div className="flex flex-col gap-1">
                             {block.label && <label htmlFor={block.name} className="text-sm font-medium text-neutral-700">{block.label}</label>}
-                            <input id={block.name} name={block.name} type="number" placeholder={block.placeholder} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
+                            <input id={block.name} name={block.name} type="number" defaultValue={block.value} placeholder={block.placeholder} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
                         </div>
                     )}
                     {block.type === "slot" &&

@@ -760,6 +760,22 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                     );
                                 }
 
+                                // State's Mapping field only makes sense once something is
+                                // actually feeding this step data to map — with no incoming
+                                // edge there's nothing to pull {{field}} values from, so hide
+                                // it rather than show a mapping box that can't do anything.
+                                if (selectedNode.type === "state" && field.key === "mapping") {
+                                    const hasInput = edges.some((e) => e.target === selectedNode.id);
+                                    if (!hasInput) {
+                                        return (
+                                            <div key={field.key} className="flex flex-col gap-1.5">
+                                                <Label>{field.label}</Label>
+                                                <p className="text-sm text-neutral-500">Chain a step into this State step to map its data.</p>
+                                            </div>
+                                        );
+                                    }
+                                }
+
                                 return (
                                     <div key={field.key} className="flex flex-col gap-1.5">
                                         <Label htmlFor={field.key}>{field.label}</Label>

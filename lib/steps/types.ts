@@ -128,10 +128,22 @@ export interface StepContext {
     // rendering the View's content inside that shared layout instead of
     // as its own page.
     viewOutput: Record<string, { title: string; blocks: unknown[] }>;
-    // State debug output — when a State step chains directly to a View, it
-    // stores its resolved values here so the View can auto-inject a JSON
-    // display block. Cleared by the View after rendering.
-    stateDebugJson?: string;
+    // This request's server-resolved patch from the most recently run
+    // State step (see lib/steps/state.ts), plus that State node's own id.
+    // State only ever really stores into the visitor's browser
+    // (localStorage / window.__nukeStores) — the server has no way to
+    // read that back, so this is *not* the authoritative "current state",
+    // just this request's best guess, used for:
+    //   - a first-paint fallback so a chained View/Input isn't blank
+    //     before JS runs;
+    //   - `nodeId`, so the rendered markup can be tagged (e.g. a View's
+    //     debug block gets `data-state-debug={nodeId}`) for State's own
+    //     client-side hydration script to find and correct with the real,
+    //     persisted-aware store contents once the page loads.
+    // Not merged into `body` for arbitrary downstream templating — see
+    // lib/steps/state.ts. Overwritten (not merged) each time a State step
+    // runs.
+    stateValues?: { nodeId: string; data: Record<string, string> };
 }
 
 export type StepOutcome =
