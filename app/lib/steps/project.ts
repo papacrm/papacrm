@@ -5,7 +5,7 @@ const projectStep: WorkflowNodeDef = {
     label: "Project",
     description: "Select fields — chain from Find or another pipeline step",
     color: "#8b5cf6",
-    kind: "action",
+    kind: "terminal",
     fields: [
         {
             key: "selectedFields",
