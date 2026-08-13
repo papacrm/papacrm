@@ -112,7 +112,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
     const [origin, setOrigin] = useState("");
-    const [lists, setLists] = useState<{ _id: string; name: string }[] | null>(null);
+    const [lists, setLists] = useState<{ _id: string; name: string; fields?: { key: string; label: string; type: string }[] }[] | null>(null);
     const [callableWorkflows, setCallableWorkflows] = useState<{ _id: string; name: string; functions: { id: string; name: string }[] }[] | null>(
         null,
     );
@@ -134,7 +134,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         (async () => {
             try {
                 const data = await withAuthRetry(() => orpc.list.list());
-                setLists((data as any[]).map((l) => ({ _id: l._id, name: l.name })));
+                setLists((data as any[]).map((l) => ({ _id: l._id, name: l.name, fields: l.fields ?? [] })));
             } catch {
                 setLists([]);
             }
@@ -707,44 +707,53 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                                         />
                                                         <span className="text-neutral-700">_id</span>
                                                     </label>
-                                                    {/* List fields */}
-                                                    {findList && (
-                                                        <>
-                                                            {findList._id ? (
-                                                                // Placeholder - actual fields would come from list schema
-                                                                <>
-                                                                    <label className="flex items-center gap-2 text-sm">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={selectedFields.includes("createdAt")}
-                                                                            onChange={(e) => {
-                                                                                const updated = e.target.checked
-                                                                                    ? [...selectedFields, "createdAt"]
-                                                                                    : selectedFields.filter((f) => f !== "createdAt");
-                                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
-                                                                            }}
-                                                                            className="h-4 w-4"
-                                                                        />
-                                                                        <span className="text-neutral-700">createdAt</span>
-                                                                    </label>
-                                                                    <label className="flex items-center gap-2 text-sm">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={selectedFields.includes("updatedAt")}
-                                                                            onChange={(e) => {
-                                                                                const updated = e.target.checked
-                                                                                    ? [...selectedFields, "updatedAt"]
-                                                                                    : selectedFields.filter((f) => f !== "updatedAt");
-                                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
-                                                                            }}
-                                                                            className="h-4 w-4"
-                                                                        />
-                                                                        <span className="text-neutral-700">updatedAt</span>
-                                                                    </label>
-                                                                </>
-                                                            ) : null}
-                                                        </>
-                                                    )}
+                                                    {/* System fields */}
+                                                    <label className="flex items-center gap-2 text-sm">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedFields.includes("createdAt")}
+                                                            onChange={(e) => {
+                                                                const updated = e.target.checked
+                                                                    ? [...selectedFields, "createdAt"]
+                                                                    : selectedFields.filter((f) => f !== "createdAt");
+                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                            }}
+                                                            className="h-4 w-4"
+                                                        />
+                                                        <span className="text-neutral-700">createdAt</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 text-sm">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedFields.includes("updatedAt")}
+                                                            onChange={(e) => {
+                                                                const updated = e.target.checked
+                                                                    ? [...selectedFields, "updatedAt"]
+                                                                    : selectedFields.filter((f) => f !== "updatedAt");
+                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                            }}
+                                                            className="h-4 w-4"
+                                                        />
+                                                        <span className="text-neutral-700">updatedAt</span>
+                                                    </label>
+                                                    {/* List-specific fields from schema */}
+                                                    {findList.fields?.map((listField) => (
+                                                        <label key={listField.key} className="flex items-center gap-2 text-sm">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedFields.includes(listField.key)}
+                                                                onChange={(e) => {
+                                                                    const updated = e.target.checked
+                                                                        ? [...selectedFields, listField.key]
+                                                                        : selectedFields.filter((f) => f !== listField.key);
+                                                                    updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                                }}
+                                                                className="h-4 w-4"
+                                                            />
+                                                            <span className="text-neutral-700">{listField.label}</span>
+                                                            <span className="text-xs text-neutral-400">({listField.type})</span>
+                                                        </label>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
