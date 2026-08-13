@@ -35,6 +35,10 @@ import cssStep from "./css";
 import stateStep from "./state";
 import labelStep from "./label";
 import linkStep from "./link";
+import textInputStep from "./textInput";
+import checkboxInputStep from "./checkboxInput";
+import textareaInputStep from "./textareaInput";
+import numberInputStep from "./numberInput";
 import findStep from "./find";
 import matchStep from "./match";
 import projectStep from "./project";
@@ -88,6 +92,10 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     state: stateStep,
     label: labelStep,
     link: linkStep,
+    textInput: textInputStep,
+    checkboxInput: checkboxInputStep,
+    textareaInput: textareaInputStep,
+    numberInput: numberInputStep,
     find: findStep,
     match: matchStep,
     project: projectStep,
@@ -115,6 +123,10 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "state",
     "label",
     "link",
+    "textInput",
+    "checkboxInput",
+    "textareaInput",
+    "numberInput",
     "view",
     "menu",
     "tabs",

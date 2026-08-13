@@ -40,6 +40,10 @@ export type WorkflowNodeType =
     | "state"
     | "label"
     | "link"
+    | "textInput"
+    | "checkboxInput"
+    | "textareaInput"
+    | "numberInput"
     | "find"
     | "match"
     | "project"
@@ -118,6 +122,10 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "state",
                 "label",
                 "link",
+                "textInput",
+                "checkboxInput",
+                "textareaInput",
+                "numberInput",
                 "find",
                 "match",
                 "project",

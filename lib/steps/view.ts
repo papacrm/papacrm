@@ -13,7 +13,7 @@ import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } 
 // others. See resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "function"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "textInput", "checkboxInput", "textareaInput", "numberInput", "function"]);
 
 // Looks for a View wired into a ListView — an edge whose target is the
 // ListView and whose source is a "view" step. When found, that View's
@@ -88,6 +88,10 @@ export type ViewBlock =
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
+    | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
+    | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string }
+    | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
+    | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -215,6 +219,14 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             }
 
             blocks.push({ type: "link", pos, href, text, blocks: linkBlocks });
+        } else if (child.type === "textInput") {
+            blocks.push({ type: "textInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
+        } else if (child.type === "checkboxInput") {
+            blocks.push({ type: "checkboxInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? "") });
+        } else if (child.type === "textareaInput") {
+            blocks.push({ type: "textareaInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
+        } else if (child.type === "numberInput") {
+            blocks.push({ type: "numberInput", pos, name: String(child.data?.name ?? ""), label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? "") });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
