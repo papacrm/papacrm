@@ -2,7 +2,7 @@ import type { IWorkflowEdge, IWorkflowNode } from "../models/Workflow";
 import { resolveCardItems } from "./card";
 import { findChainedView, resolveViewItems, type ViewBlock } from "./view";
 import { resolveRows, type TableField, type TableRow } from "./table";
-import type { StepContext, StepExecutor } from "./types";
+import { nextEdgeTargets, type StepContext, type StepExecutor } from "./types";
 
 export interface ListViewItem {
     _id: string;
@@ -141,8 +141,15 @@ export async function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode
     return { fields, items };
 }
 
+const CHAINS_INTO = new Set(["view"]);
+
 const listViewStep: StepExecutor = {
     async run({ node, ctx, edges, nodes }) {
+        const nextNodeIds = nextEdgeTargets(node, edges);
+        if (nextNodeIds.length > 0 && nextNodeIds.every((id) => CHAINS_INTO.has(nodes.find((n) => n.id === id)?.type ?? ""))) {
+            return { done: false, nextNodeIds };
+        }
+
         const title = String(node.data?.title ?? "Records");
         const { fields, items } = await resolveListItems(node, nodes, edges, ctx);
 
