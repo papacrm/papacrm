@@ -4,7 +4,7 @@ import ListItems from "./ListItems";
 interface ListViewProps {
     title: string;
     fields: { key: string; label: string; type?: string }[];
-    items: { _id: string; text: string; card?: { title: string; subtitle: string; body: string } }[];
+    items: { _id: string; text: string; card?: { title: string; subtitle: string; body: string }; view?: any[] }[];
 }
 
 export default function ListView({ title, items }: ListViewProps) {

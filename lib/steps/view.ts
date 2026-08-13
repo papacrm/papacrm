@@ -15,6 +15,36 @@ import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } 
 // selected View's inspector).
 const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "function"]);
 
+// Looks for a View wired into a ListView — an edge whose target is the
+// ListView and whose source is a "view" step. When found, that View's
+// blocks become the ListView's per-item template.
+export function findChainedView(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[]): IWorkflowNode | null {
+    const viewEdge = edges.find((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === "view");
+    if (!viewEdge) return null;
+    return nodes.find((n) => n.id === viewEdge.source) ?? null;
+}
+
+// Renders a View's blocks once per row in a ListView. Each row becomes
+// a separate set of blocks with templates resolved against that row's data.
+export async function resolveViewItems(
+    viewNode: IWorkflowNode,
+    nodes: IWorkflowNode[],
+    edges: IWorkflowEdge[],
+    ctx: StepContext,
+    rows: Array<{ _id: string; data: Record<string, any> }>,
+): Promise<ViewBlock[][]> {
+    const items: ViewBlock[][] = [];
+
+    for (const row of rows) {
+        // Create a temporary context with this row's data for template resolution
+        const rowCtx = { ...ctx, body: row.data };
+        const blocks = await resolveChildren(viewNode, nodes, edges, rowCtx, 0);
+        items.push(blocks);
+    }
+
+    return items;
+}
+
 // A View that itself contains another View can't recurse forever — a
 // person could otherwise wire View A into View B and View B back into
 // View A. Same spirit as MAX_CALL_DEPTH in types.ts.
@@ -134,7 +164,7 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             const { fields, documents } = resolveRows(ctx);
             blocks.push({ type: "table", pos, fields, documents });
         } else if (child.type === "listView") {
-            const { fields, items } = resolveListItems(child, nodes, edges, ctx);
+            const { fields, items } = await resolveListItems(child, nodes, edges, ctx);
             blocks.push({ type: "listView", pos, title: String(child.data?.title ?? ""), fields, items });
         } else if (child.type === "card") {
             const { fields, items } = resolveCardItems(child, ctx);
@@ -185,6 +215,13 @@ const viewStep: StepExecutor = {
         // no longer its own separate page.
         const nextNodeIds = nextEdgeTargets(node, edges);
         if (nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "view")) {
+            return { done: false, nextNodeIds };
+        }
+
+        // A View can also chain into a ListView as a per-item template,
+        // similar to how Card chains in. Same idea: don't render the View
+        // itself, just pass control to the ListView.
+        if (nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "listView")) {
             return { done: false, nextNodeIds };
         }
 

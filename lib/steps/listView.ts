@@ -1,5 +1,6 @@
 import type { IWorkflowEdge, IWorkflowNode } from "../models/Workflow";
 import { resolveCardItems } from "./card";
+import { findChainedView, resolveViewItems, type ViewBlock } from "./view";
 import { resolveRows, type TableField, type TableRow } from "./table";
 import type { StepContext, StepExecutor } from "./types";
 
@@ -13,6 +14,10 @@ export interface ListViewItem {
     // findChainedCard below) — a component uses this in place of `text`
     // for that row.
     card?: { title: string; subtitle: string; body: string };
+    // Set only when a View is chained into this List View (see
+    // findChainedView below) — renders the View's blocks for each row
+    // with templates resolved against that row's data.
+    view?: ViewBlock[];
 }
 
 function defaultText(fields: TableField[], row: TableRow): string {
@@ -37,12 +42,25 @@ function findChainedCard(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWo
 // Shared by listViewStep.run() (standalone-page use) and View's
 // "listView" block (lib/steps/view.ts) — same split as Table's
 // resolveRows in ./table.
-export function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[], ctx: StepContext): { fields: TableField[]; items: ListViewItem[] } {
+export async function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[], ctx: StepContext): Promise<{ fields: TableField[]; items: ListViewItem[] }> {
     const { fields, documents } = resolveRows(ctx);
     const cardNode = findChainedCard(node, nodes, edges);
+    const viewNode = findChainedView(node, nodes, edges);
 
-    if (!cardNode) {
+    if (!cardNode && !viewNode) {
         return { fields, items: documents.map((row) => ({ _id: row._id, text: defaultText(fields, row) })) };
+    }
+
+    if (viewNode && !cardNode) {
+        // The chained View renders its blocks once per row, with templates
+        // resolved against each row's data.
+        const viewItems = await resolveViewItems(viewNode, nodes, edges, ctx, documents);
+        const items: ListViewItem[] = documents.map((row, i) => ({
+            _id: row._id,
+            text: defaultText(fields, row),
+            view: viewItems[i],
+        }));
+        return { fields, items };
     }
 
     // The chained Card resolves the *same* upstream rows again (it reads
@@ -59,9 +77,9 @@ export function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode[], ed
 }
 
 const listViewStep: StepExecutor = {
-    run({ node, ctx, edges, nodes }) {
+    async run({ node, ctx, edges, nodes }) {
         const title = String(node.data?.title ?? "Records");
-        const { fields, items } = resolveListItems(node, nodes, edges, ctx);
+        const { fields, items } = await resolveListItems(node, nodes, edges, ctx);
 
         return {
             done: true,
