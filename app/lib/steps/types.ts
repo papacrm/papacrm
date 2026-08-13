@@ -39,7 +39,13 @@ export type WorkflowNodeType =
     | "css"
     | "state"
     | "label"
-    | "link";
+    | "link"
+    | "find"
+    | "match"
+    | "project"
+    | "sort"
+    | "limit"
+    | "skip";
 
 export interface WorkflowNode {
     id: string;

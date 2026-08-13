@@ -39,7 +39,13 @@ export type WorkflowNodeType =
     | "css"
     | "state"
     | "label"
-    | "link";
+    | "link"
+    | "find"
+    | "match"
+    | "project"
+    | "sort"
+    | "limit"
+    | "skip";
 
 export interface IWorkflowNode {
     id: string;
@@ -112,6 +118,12 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "state",
                 "label",
                 "link",
+                "find",
+                "match",
+                "project",
+                "sort",
+                "limit",
+                "skip",
             ],
         },
         x: { type: Number, required: true, default: 0 },

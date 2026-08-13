@@ -668,25 +668,108 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                 <p className="text-xs text-neutral-500">{NODE_DEFS[selectedNode.type].description}</p>
                             </div>
 
-                            {NODE_DEFS[selectedNode.type].fields.map((field) => (
-                                <div key={field.key} className="flex flex-col gap-1.5">
-                                    <Label htmlFor={field.key}>{field.label}</Label>
-                                    {field.kind === "select" && field.dynamicOptions === "lists" ? (
-                                        <select
-                                            id={field.key}
-                                            value={selectedNode.data?.[field.key] ?? ""}
-                                            onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
-                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
-                                            disabled={lists === null}
-                                        >
-                                            <option value="">{lists === null ? "Loading lists…" : lists.length === 0 ? "No lists yet" : "Select a list…"}</option>
-                                            {lists?.map((l) => (
-                                                <option key={l._id} value={l._id}>
-                                                    {l.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    ) : field.kind === "select" ? (
+                            {NODE_DEFS[selectedNode.type].fields.map((field) => {
+                                // Special handling for Project step with findFields
+                                if (field.kind === "select" && field.dynamicOptions === "findFields" && selectedNode.type === "project") {
+                                    const findEdge = edges.find((e) => e.target === selectedNode.id && nodes.find((n) => n.id === e.source)?.type === "find");
+                                    const findNode = findEdge ? nodes.find((n) => n.id === findEdge.source) : null;
+                                    const findListId = findNode?.data?.list;
+                                    const findList = lists?.find((l) => l._id === findListId);
+                                    const selectedFields = (() => {
+                                        try {
+                                            return JSON.parse(selectedNode.data?.[field.key] ?? "[]");
+                                        } catch {
+                                            return [];
+                                        }
+                                    })();
+
+                                    return (
+                                        <div key={field.key} className="flex flex-col gap-3">
+                                            <Label>{field.label}</Label>
+                                            {!findNode ? (
+                                                <p className="text-sm text-neutral-500">Chain from a Find step to see fields</p>
+                                            ) : !findList ? (
+                                                <p className="text-sm text-neutral-500">No list selected in Find step</p>
+                                            ) : (
+                                                <div className="flex flex-col gap-2">
+                                                    {/* Always include _id */}
+                                                    <label className="flex items-center gap-2 text-sm">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedFields.includes("_id")}
+                                                            onChange={(e) => {
+                                                                const updated = e.target.checked
+                                                                    ? [...selectedFields, "_id"]
+                                                                    : selectedFields.filter((f) => f !== "_id");
+                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                            }}
+                                                            className="h-4 w-4"
+                                                        />
+                                                        <span className="text-neutral-700">_id</span>
+                                                    </label>
+                                                    {/* List fields */}
+                                                    {findList && (
+                                                        <>
+                                                            {findList._id ? (
+                                                                // Placeholder - actual fields would come from list schema
+                                                                <>
+                                                                    <label className="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedFields.includes("createdAt")}
+                                                                            onChange={(e) => {
+                                                                                const updated = e.target.checked
+                                                                                    ? [...selectedFields, "createdAt"]
+                                                                                    : selectedFields.filter((f) => f !== "createdAt");
+                                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                                            }}
+                                                                            className="h-4 w-4"
+                                                                        />
+                                                                        <span className="text-neutral-700">createdAt</span>
+                                                                    </label>
+                                                                    <label className="flex items-center gap-2 text-sm">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedFields.includes("updatedAt")}
+                                                                            onChange={(e) => {
+                                                                                const updated = e.target.checked
+                                                                                    ? [...selectedFields, "updatedAt"]
+                                                                                    : selectedFields.filter((f) => f !== "updatedAt");
+                                                                                updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                                            }}
+                                                                            className="h-4 w-4"
+                                                                        />
+                                                                        <span className="text-neutral-700">updatedAt</span>
+                                                                    </label>
+                                                                </>
+                                                            ) : null}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div key={field.key} className="flex flex-col gap-1.5">
+                                        <Label htmlFor={field.key}>{field.label}</Label>
+                                        {field.kind === "select" && field.dynamicOptions === "lists" ? (
+                                            <select
+                                                id={field.key}
+                                                value={selectedNode.data?.[field.key] ?? ""}
+                                                onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
+                                                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                disabled={lists === null}
+                                            >
+                                                <option value="">{lists === null ? "Loading lists…" : lists.length === 0 ? "No lists yet" : "Select a list…"}</option>
+                                                {lists?.map((l) => (
+                                                    <option key={l._id} value={l._id}>
+                                                        {l.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : field.kind === "select" ? (
                                         <select
                                             id={field.key}
                                             value={selectedNode.data?.[field.key] ?? ""}
@@ -721,9 +804,10 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                             onChange={(e) => updateNodeData(selectedNode.id, field.key, e.target.value)}
                                             placeholder={field.placeholder}
                                         />
-                                    )}
-                                </div>
-                            ))}
+                                        )}
+                                    </div>
+                                );
+                            })}
 
                             {selectedNode.type === "call" &&
                                 (() => {

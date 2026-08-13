@@ -36,6 +36,12 @@ import cssStep from "./css";
 import stateStep from "./state";
 import labelStep from "./label";
 import linkStep from "./link";
+import findStep from "./find";
+import matchStep from "./match";
+import projectStep from "./project";
+import sortStep from "./sort";
+import limitStep from "./limit";
+import skipStep from "./skip";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -82,6 +88,12 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     state: stateStep,
     label: labelStep,
     link: linkStep,
+    find: findStep,
+    match: matchStep,
+    project: projectStep,
+    sort: sortStep,
+    limit: limitStep,
+    skip: skipStep,
 };
 
 export * from "./types";

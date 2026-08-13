@@ -35,6 +35,12 @@ import cssStep from "./css";
 import stateStep from "./state";
 import labelStep from "./label";
 import linkStep from "./link";
+import findStep from "./find";
+import matchStep from "./match";
+import projectStep from "./project";
+import sortStep from "./sort";
+import limitStep from "./limit";
+import skipStep from "./skip";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -82,6 +88,12 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     state: stateStep,
     label: labelStep,
     link: linkStep,
+    find: findStep,
+    match: matchStep,
+    project: projectStep,
+    sort: sortStep,
+    limit: limitStep,
+    skip: skipStep,
 };
 
 export const NODE_ORDER: WorkflowNodeType[] = [
@@ -121,6 +133,12 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "setCookie",
     "jwtVerify",
     "jwtSign",
+    "find",
+    "match",
+    "project",
+    "sort",
+    "limit",
+    "skip",
 ];
 
 export * from "./types";
