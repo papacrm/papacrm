@@ -20,7 +20,7 @@ const CANVAS_HEIGHT = 900;
 // Step types that can be dropped into a View's page — see the "Layout"
 // section rendered below for a selected View node, and its server-side
 // counterpart, EMBEDDABLE_TYPES in lib/steps/view.ts.
-const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "textInput", "checkboxInput", "textareaInput", "numberInput", "function"];
+const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "textInput", "checkboxInput", "textareaInput", "numberInput", "function", "state"];
 
 // Step types whose inspector gets extra room — a page built visually
 // (View), a form's field list (Input Form), and a full HTML page
