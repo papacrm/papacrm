@@ -34,6 +34,7 @@ import htmlStep from "./html";
 import cssStep from "./css";
 import stateStep from "./state";
 import labelStep from "./label";
+import linkStep from "./link";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -80,6 +81,7 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     css: cssStep,
     state: stateStep,
     label: labelStep,
+    link: linkStep,
 };
 
 export const NODE_ORDER: WorkflowNodeType[] = [
@@ -100,6 +102,7 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "css",
     "state",
     "label",
+    "link",
     "view",
     "menu",
     "tabs",

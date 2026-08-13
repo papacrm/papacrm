@@ -18,6 +18,12 @@ export interface ListViewItem {
     // findChainedView below) — renders the View's blocks for each row
     // with templates resolved against that row's data.
     view?: ViewBlock[];
+    // Set only when a Link is chained into this List View — makes each
+    // row a clickable link with the href templated for that row.
+    href?: string;
+    // When a Link is chained and a Label is chained to that Link, this
+    // contains the Label's text templated for this row.
+    linkText?: string;
 }
 
 function defaultText(fields: TableField[], row: TableRow): string {
@@ -25,6 +31,15 @@ function defaultText(fields: TableField[], row: TableRow): string {
         .map((f) => String(row.data?.[f.key] ?? ""))
         .filter(Boolean)
         .join(" — ");
+}
+
+// Same row templating as renderRowTemplate in card.ts, but for Link
+function renderLinkTemplate(template: string, row: TableRow): string {
+    if (!template) return "";
+    return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path) => {
+        const value = (row.data as any)?.[path];
+        return value === undefined || value === null ? "" : String(value);
+    });
 }
 
 // Looks for a Card wired into this List View — an edge whose target is
@@ -39,6 +54,22 @@ function findChainedCard(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWo
     return nodes.find((n) => n.id === cardEdge.source) ?? null;
 }
 
+// Looks for a Link wired into this List View — makes each row a clickable
+// link with the href templated for that row.
+function findChainedLink(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[]): IWorkflowNode | null {
+    const linkEdge = edges.find((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === "link");
+    if (!linkEdge) return null;
+    return nodes.find((n) => n.id === linkEdge.source) ?? null;
+}
+
+// Looks for a Label wired into a Link — when a Label chains to a Link,
+// the Label's text becomes the Link's display text.
+function findChainedLabel(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[]): IWorkflowNode | null {
+    const labelEdge = edges.find((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === "label");
+    if (!labelEdge) return null;
+    return nodes.find((n) => n.id === labelEdge.source) ?? null;
+}
+
 // Shared by listViewStep.run() (standalone-page use) and View's
 // "listView" block (lib/steps/view.ts) — same split as Table's
 // resolveRows in ./table.
@@ -46,9 +77,26 @@ export async function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode
     const { fields, documents } = resolveRows(ctx);
     const cardNode = findChainedCard(node, nodes, edges);
     const viewNode = findChainedView(node, nodes, edges);
+    const linkNode = findChainedLink(node, nodes, edges);
 
-    if (!cardNode && !viewNode) {
+    if (!cardNode && !viewNode && !linkNode) {
         return { fields, items: documents.map((row) => ({ _id: row._id, text: defaultText(fields, row) })) };
+    }
+
+    if (linkNode && !cardNode && !viewNode) {
+        // The chained Link makes each row a clickable link with the href
+        // templated against that row's data.
+        const href = String(linkNode.data?.href ?? "");
+        const labelNode = findChainedLabel(linkNode, nodes, edges);
+        const labelTemplate = labelNode ? String(labelNode.data?.field ?? "") : "";
+
+        const items: ListViewItem[] = documents.map((row) => ({
+            _id: row._id,
+            text: defaultText(fields, row),
+            href: renderLinkTemplate(href, row),
+            linkText: labelTemplate ? renderLinkTemplate(labelTemplate, row) : undefined,
+        }));
+        return { fields, items };
     }
 
     if (viewNode && !cardNode) {

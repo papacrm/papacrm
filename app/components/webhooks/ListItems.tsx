@@ -1,3 +1,4 @@
+import { Link } from "nukejs";
 import BlockGrid from "./BlockGrid";
 
 interface ListItemsItem {
@@ -5,6 +6,8 @@ interface ListItemsItem {
     text: string;
     card?: { title: string; subtitle: string; body: string };
     view?: any[]; // ViewBlock[]
+    href?: string;
+    linkText?: string;
 }
 
 interface ListItemsProps {
@@ -17,8 +20,9 @@ interface ListItemsProps {
 // lib/steps/listView.ts / lib/steps/view.ts, which both hand this the
 // same { items } shape from resolveListItems()). When a Card is chained
 // into the List View, `item.card` is set and takes over the <li>'s
-// content instead of `item.text`. When a View is chained, `item.view` is
-// set and its blocks are rendered as the item template.
+// content. When a View is chained, `item.view` is set and its blocks are
+// rendered. When a Link is chained, `item.href` is set and the row becomes
+// a clickable link.
 export default function ListItems({ items }: ListItemsProps) {
     if (items.length === 0) {
         return <p className="text-sm text-neutral-500">No records yet.</p>;
@@ -27,8 +31,15 @@ export default function ListItems({ items }: ListItemsProps) {
     return (
         <ul className="flex flex-col divide-y divide-neutral-100 rounded-md border border-neutral-200">
             {items.map((item) => (
-                <li key={item._id} className="px-4 py-3 text-sm text-neutral-700">
-                    {item.view ? (
+                <li key={item._id} className={item.href ? "" : "px-4 py-3 text-sm text-neutral-700"}>
+                    {item.href ? (
+                        <Link
+                            href={item.href}
+                            className="block px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+                        >
+                            {item.linkText || item.text || <span className="text-neutral-400">—</span>}
+                        </Link>
+                    ) : item.view ? (
                         <BlockGrid blocks={item.view} />
                     ) : item.card ? (
                         <div className="flex flex-col gap-0.5">

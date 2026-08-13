@@ -13,7 +13,7 @@ import { nextEdgeTargets, renderTemplate, type StepContext, type StepExecutor } 
 // others. See resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "function"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "function"]);
 
 // Looks for a View wired into a ListView — an edge whose target is the
 // ListView and whose source is a "view" step. When found, that View's
@@ -22,6 +22,15 @@ export function findChainedView(node: IWorkflowNode, nodes: IWorkflowNode[], edg
     const viewEdge = edges.find((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === "view");
     if (!viewEdge) return null;
     return nodes.find((n) => n.id === viewEdge.source) ?? null;
+}
+
+// Looks for a Label wired into a Link — an edge whose target is the Link
+// and whose source is a "label" step. When found, the Label's resolved
+// text becomes the Link's display text.
+function findChainedLabel(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[]): IWorkflowNode | null {
+    const labelEdge = edges.find((e) => e.target === node.id && nodes.find((n) => n.id === e.source)?.type === "label");
+    if (!labelEdge) return null;
+    return nodes.find((n) => n.id === labelEdge.source) ?? null;
 }
 
 // Renders a View's blocks once per row in a ListView. Each row becomes
@@ -78,6 +87,7 @@ export type ViewBlock =
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
+    | { type: "link"; pos: ViewBlockPosition; href: string; text?: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -191,6 +201,14 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
         } else if (child.type === "label") {
             const text = renderTemplate(String(child.data?.field ?? ""), ctx);
             blocks.push({ type: "label", pos, text });
+        } else if (child.type === "link") {
+            const href = renderTemplate(String(child.data?.href ?? ""), ctx);
+            const labelNode = findChainedLabel(child, nodes, edges);
+            let text: string | undefined;
+            if (labelNode) {
+                text = renderTemplate(String(labelNode.data?.field ?? ""), ctx);
+            }
+            blocks.push({ type: "link", pos, href, text });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
