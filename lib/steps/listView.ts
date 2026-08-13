@@ -24,6 +24,9 @@ export interface ListViewItem {
     // When a Link is chained and a Label is chained to that Link, this
     // contains the Label's text templated for this row.
     linkText?: string;
+    // When a Link is chained and a View is chained to that Link, this
+    // contains the View's blocks rendered for this row.
+    linkView?: ViewBlock[];
 }
 
 function defaultText(fields: TableField[], row: TableRow): string {
@@ -85,11 +88,25 @@ export async function resolveListItems(node: IWorkflowNode, nodes: IWorkflowNode
 
     if (linkNode && !cardNode && !viewNode) {
         // The chained Link makes each row a clickable link with the href
-        // templated against that row's data.
+        // templated against that row's data. If a View chains to the Link,
+        // render the View's blocks for each row.
         const href = String(linkNode.data?.href ?? "");
         const labelNode = findChainedLabel(linkNode, nodes, edges);
-        const labelTemplate = labelNode ? String(labelNode.data?.field ?? "") : "";
+        const linkViewNode = findChainedView(linkNode, nodes, edges);
 
+        if (linkViewNode) {
+            // View chains to Link — render View blocks per row
+            const linkViewItems = await resolveViewItems(linkViewNode, nodes, edges, ctx, documents);
+            const items: ListViewItem[] = documents.map((row, i) => ({
+                _id: row._id,
+                text: defaultText(fields, row),
+                href: renderLinkTemplate(href, row),
+                linkView: linkViewItems[i],
+            }));
+            return { fields, items };
+        }
+
+        const labelTemplate = labelNode ? String(labelNode.data?.field ?? "") : "";
         const items: ListViewItem[] = documents.map((row) => ({
             _id: row._id,
             text: defaultText(fields, row),

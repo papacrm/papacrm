@@ -40,7 +40,7 @@ type ViewBlock =
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
-    | { type: "link"; pos: ViewBlockPosition; href: string; text?: string }
+    | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     | { type: "slot"; pos: ViewBlockPosition; name: string; content: string | null; blocks?: ViewBlock[] };
 
@@ -81,7 +81,7 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     {block.type === "label" && <p className="text-neutral-700">{block.text}</p>}
                     {block.type === "link" && (
                         <Link href={block.href} className="inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
-                            {block.text || "Click here"}
+                            {block.blocks ? <BlockGrid blocks={block.blocks} /> : block.text || "Click here"}
                         </Link>
                     )}
                     {block.type === "slot" &&

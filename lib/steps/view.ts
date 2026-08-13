@@ -87,7 +87,7 @@ export type ViewBlock =
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string }
-    | { type: "link"; pos: ViewBlockPosition; href: string; text?: string }
+    | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -204,11 +204,17 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
         } else if (child.type === "link") {
             const href = renderTemplate(String(child.data?.href ?? ""), ctx);
             const labelNode = findChainedLabel(child, nodes, edges);
+            const viewNode = findChainedView(child, nodes, edges);
             let text: string | undefined;
-            if (labelNode) {
+            let linkBlocks: ViewBlock[] | undefined;
+
+            if (viewNode) {
+                linkBlocks = await resolveChildren(viewNode, nodes, edges, ctx, depth + 1);
+            } else if (labelNode) {
                 text = renderTemplate(String(labelNode.data?.field ?? ""), ctx);
             }
-            blocks.push({ type: "link", pos, href, text });
+
+            blocks.push({ type: "link", pos, href, text, blocks: linkBlocks });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;
@@ -240,6 +246,12 @@ const viewStep: StepExecutor = {
         // similar to how Card chains in. Same idea: don't render the View
         // itself, just pass control to the ListView.
         if (nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "listView")) {
+            return { done: false, nextNodeIds };
+        }
+
+        // A View can also chain into a Link as its content/blocks. Don't render
+        // the View itself, just pass control to the Link.
+        if (nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "link")) {
             return { done: false, nextNodeIds };
         }
 

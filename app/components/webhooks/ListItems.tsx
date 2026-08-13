@@ -8,6 +8,7 @@ interface ListItemsItem {
     view?: any[]; // ViewBlock[]
     href?: string;
     linkText?: string;
+    linkView?: any[]; // ViewBlock[]
 }
 
 interface ListItemsProps {
@@ -22,7 +23,8 @@ interface ListItemsProps {
 // into the List View, `item.card` is set and takes over the <li>'s
 // content. When a View is chained, `item.view` is set and its blocks are
 // rendered. When a Link is chained, `item.href` is set and the row becomes
-// a clickable link.
+// a clickable link. When a Link has a View chained to it, `item.linkView`
+// contains the rendered blocks.
 export default function ListItems({ items }: ListItemsProps) {
     if (items.length === 0) {
         return <p className="text-sm text-neutral-500">No records yet.</p>;
@@ -37,7 +39,11 @@ export default function ListItems({ items }: ListItemsProps) {
                             href={item.href}
                             className="block px-4 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
                         >
-                            {item.linkText || item.text || <span className="text-neutral-400">—</span>}
+                            {item.linkView ? (
+                                <BlockGrid blocks={item.linkView} />
+                            ) : (
+                                item.linkText || item.text || <span className="text-neutral-400">—</span>
+                            )}
                         </Link>
                     ) : item.view ? (
                         <BlockGrid blocks={item.view} />
