@@ -36,6 +36,8 @@ import cssStep from "./css";
 import stateStep from "./state";
 import labelStep from "./label";
 import linkStep from "./link";
+import divStep from "./div";
+import classStep from "./class";
 import textInputStep from "./textInput";
 import checkboxInputStep from "./checkboxInput";
 import textareaInputStep from "./textareaInput";
@@ -48,6 +50,12 @@ import limitStep from "./limit";
 import skipStep from "./skip";
 import listStep from "./list";
 import countStep from "./count";
+import distinctStep from "./distinct";
+import delayStep from "./delay";
+import randomStep from "./random";
+import textStep from "./text";
+import imageStep from "./image";
+import selectInputStep from "./selectInput";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib-server/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -94,6 +102,8 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     state: stateStep,
     label: labelStep,
     link: linkStep,
+    div: divStep,
+    class: classStep,
     textInput: textInputStep,
     checkboxInput: checkboxInputStep,
     textareaInput: textareaInputStep,
@@ -106,6 +116,12 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     skip: skipStep,
     list: listStep,
     count: countStep,
+    distinct: distinctStep,
+    delay: delayStep,
+    random: randomStep,
+    text: textStep,
+    image: imageStep,
+    selectInput: selectInputStep,
 };
 
 export * from "./types";

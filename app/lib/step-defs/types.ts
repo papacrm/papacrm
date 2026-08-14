@@ -40,6 +40,8 @@ export type WorkflowNodeType =
     | "state"
     | "label"
     | "link"
+    | "div"
+    | "class"
     | "textInput"
     | "checkboxInput"
     | "textareaInput"
@@ -51,7 +53,18 @@ export type WorkflowNodeType =
     | "limit"
     | "skip"
     | "list"
-    | "count";
+    | "count"
+    | "distinct"
+    | "delay"
+    | "random"
+    | "text"
+    | "image"
+    | "selectInput";
+
+// Groups steps in the editor's palette (see WorkflowEditor.tsx). Purely a
+// UI grouping — has no effect on execution. To add a new category, add it
+// here and give it an entry in CATEGORY_META in index.ts.
+export type WorkflowStepCategory = "triggers" | "data" | "logic" | "requests" | "responses" | "blocks" | "forms";
 
 export interface WorkflowNode {
     id: string;

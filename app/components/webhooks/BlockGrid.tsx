@@ -1,4 +1,5 @@
 import { Link } from "nukejs";
+import { cn } from "../../lib/utils";
 import Menu, { type MenuLink } from "./Menu";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
@@ -39,12 +40,15 @@ type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "label"; pos: ViewBlockPosition; text: string }
+    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string }
+    | { type: "div"; pos: ViewBlockPosition; className?: string; blocks: ViewBlock[] }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
+    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string }
     | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
     | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "selectInput"; pos: ViewBlockPosition; name: string; label: string; options: { value: string; label: string }[]; value: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     | { type: "slot"; pos: ViewBlockPosition; name: string; content: string | null; blocks?: ViewBlock[] };
 
@@ -82,11 +86,20 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}
                     {block.type === "gap" && <div style={{ height: block.size }} aria-hidden="true" />}
-                    {block.type === "label" && <p className="text-neutral-700">{block.text}</p>}
+                    {block.type === "label" && <p className={cn("text-neutral-700", block.className)}>{block.text}</p>}
+                    {block.type === "div" && (
+                        <div className={cn(block.className)}>
+                            <BlockGrid blocks={block.blocks} />
+                        </div>
+                    )}
                     {block.type === "link" && (
                         <Link href={block.href} className="inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
                             {block.blocks ? <BlockGrid blocks={block.blocks} /> : block.text || "Click here"}
                         </Link>
+                    )}
+                    {block.type === "image" && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={block.src} alt={block.alt} className="h-auto max-w-full rounded-md" />
                     )}
                     {block.type === "textInput" && (
                         <div className="flex flex-col gap-1">
@@ -110,6 +123,18 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                         <div className="flex flex-col gap-1">
                             {block.label && <label htmlFor={block.name} className="text-sm font-medium text-neutral-700">{block.label}</label>}
                             <input id={block.name} name={block.name} type="number" defaultValue={block.value} placeholder={block.placeholder} className="rounded-md border border-neutral-200 px-3 py-2 text-sm" />
+                        </div>
+                    )}
+                    {block.type === "selectInput" && (
+                        <div className="flex flex-col gap-1">
+                            {block.label && <label htmlFor={block.name} className="text-sm font-medium text-neutral-700">{block.label}</label>}
+                            <select id={block.name} name={block.name} defaultValue={block.value} className="rounded-md border border-neutral-200 px-3 py-2 text-sm">
+                                {block.options.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     )}
                     {block.type === "slot" &&

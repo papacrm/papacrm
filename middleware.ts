@@ -174,6 +174,13 @@ async function tryHandleWebhook(
         return true;
     }
 
+    if (result.kind === "text") {
+        res.statusCode = result.status;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end(result.text);
+        return true;
+    }
+
     res.statusCode = result.status;
     res.end();
     return true;

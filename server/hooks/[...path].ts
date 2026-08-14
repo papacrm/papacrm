@@ -136,6 +136,13 @@ async function handle(req: ApiRequest, res: ApiResponse) {
         return;
     }
 
+    if (result.kind === "text") {
+        res.statusCode = result.status;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end(result.text);
+        return;
+    }
+
     res.statusCode = result.status;
     res.end();
 }

@@ -40,6 +40,8 @@ export type WorkflowNodeType =
     | "state"
     | "label"
     | "link"
+    | "div"
+    | "class"
     | "textInput"
     | "checkboxInput"
     | "textareaInput"
@@ -51,7 +53,13 @@ export type WorkflowNodeType =
     | "limit"
     | "skip"
     | "list"
-    | "count";
+    | "count"
+    | "distinct"
+    | "delay"
+    | "random"
+    | "text"
+    | "image"
+    | "selectInput";
 
 export interface IWorkflowNode {
     id: string;
@@ -124,6 +132,8 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "state",
                 "label",
                 "link",
+                "div",
+                "class",
                 "textInput",
                 "checkboxInput",
                 "textareaInput",
@@ -136,6 +146,12 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "skip",
                 "list",
                 "count",
+                "distinct",
+                "delay",
+                "random",
+                "text",
+                "image",
+                "selectInput",
             ],
         },
         x: { type: Number, required: true, default: 0 },

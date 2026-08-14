@@ -70,6 +70,7 @@ export interface SetCookieInstruction {
 export type WorkflowResult =
     | ({ kind: "page"; status: number; page: WorkflowPage } & WorkflowResultExtras)
     | ({ kind: "json"; status: number; data: unknown } & WorkflowResultExtras)
+    | ({ kind: "text"; status: number; text: string } & WorkflowResultExtras)
     | ({ kind: "empty"; status: number } & WorkflowResultExtras);
 
 export interface StepContext {

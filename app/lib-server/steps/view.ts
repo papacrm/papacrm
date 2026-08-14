@@ -15,6 +15,7 @@ import countStep from "./count";
 import mapperStep from "./mapper";
 import queryStep from "./query";
 import findOneStep from "./findOne";
+import { resolveClassName } from "./class";
 
 function escapeHtml(text: string): string {
     return text
@@ -33,7 +34,7 @@ function escapeHtml(text: string): string {
 // others. See resolveChildren below and the matching UI in
 // app/components/workflows/WorkflowEditor.tsx (the "Layout" section of a
 // selected View's inspector).
-const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "textInput", "checkboxInput", "textareaInput", "numberInput", "function"]);
+const EMBEDDABLE_TYPES = new Set(["menu", "tabs", "navbar", "footer", "view", "div", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "image", "textInput", "checkboxInput", "textareaInput", "numberInput", "selectInput", "function"]);
 
 // Looks for a View wired into a ListView — an edge whose target is the
 // ListView and whose source is a "view" step. When found, that View's
@@ -106,12 +107,15 @@ export type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; stepId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "label"; pos: ViewBlockPosition; text: string }
+    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string }
+    | { type: "div"; pos: ViewBlockPosition; className?: string; blocks: ViewBlock[] }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
+    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string }
     | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
     | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "numberInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
+    | { type: "selectInput"; pos: ViewBlockPosition; name: string; label: string; options: { value: string; label: string }[]; value: string }
     | { type: "view"; pos: ViewBlockPosition; title: string; blocks: ViewBlock[] }
     // A Function wired into a View — a placeholder that's filled in one of
     // two ways, checked in that order:
@@ -317,7 +321,12 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             blocks.push({ type: "gap", pos, size: Number.isFinite(size) && size > 0 ? size : 48 });
         } else if (child.type === "label") {
             const text = renderTemplate(String(child.data?.field ?? ""), ctx);
-            blocks.push({ type: "label", pos, text });
+            const className = resolveClassName(child, nodes, edges);
+            blocks.push({ type: "label", pos, text, className: className || undefined });
+        } else if (child.type === "div") {
+            const className = resolveClassName(child, nodes, edges);
+            const nestedBlocks = await resolveChildren(child, nodes, edges, ctx, depth + 1);
+            blocks.push({ type: "div", pos, className: className || undefined, blocks: nestedBlocks });
         } else if (child.type === "link") {
             const href = renderTemplate(String(child.data?.href ?? ""), ctx);
             const labelNode = findChainedLabel(child, nodes, edges);
@@ -332,6 +341,9 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             }
 
             blocks.push({ type: "link", pos, href, text, blocks: linkBlocks });
+        } else if (child.type === "image") {
+            const src = renderTemplate(String(child.data?.src ?? ""), ctx);
+            blocks.push({ type: "image", pos, src, alt: String(child.data?.alt ?? "") });
         } else if (child.type === "textInput") {
             const name = String(child.data?.name ?? "");
             const value = resolveInputValue(name, ctx);
@@ -351,6 +363,20 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             const name = String(child.data?.name ?? "");
             const value = resolveInputValue(name, ctx);
             blocks.push({ type: "numberInput", pos, name, label: String(child.data?.label ?? ""), placeholder: String(child.data?.placeholder ?? ""), value: value == null ? "" : String(value) });
+        } else if (child.type === "selectInput") {
+            const name = String(child.data?.name ?? "");
+            const value = resolveInputValue(name, ctx);
+            let options: { value: string; label: string }[] = [];
+            try {
+                const parsed = JSON.parse(child.data?.options ?? "[]");
+                if (Array.isArray(parsed)) {
+                    options = parsed.filter((o) => o && typeof o.value === "string").map((o) => ({ value: o.value, label: String(o.label ?? o.value) }));
+                }
+            } catch {
+                // Malformed JSON in the options field — render with no
+                // options rather than failing the whole page.
+            }
+            blocks.push({ type: "selectInput", pos, name, label: String(child.data?.label ?? ""), options, value: value == null ? "" : String(value) });
         } else if (child.type === "function") {
             const name = String(child.data?.name ?? "") || "Function";
             const slotBlocks = Object.prototype.hasOwnProperty.call(ctx.slotBlocks, child.id) ? (ctx.slotBlocks[child.id] as ViewBlock[]) : undefined;

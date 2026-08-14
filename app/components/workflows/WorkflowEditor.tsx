@@ -9,8 +9,26 @@ import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Textarea } from "@/app/components/ui/textarea";
 import { HtmlEditor } from "@/app/components/ui/html-editor";
-import { NODE_DEFS, NODE_ORDER, type WorkflowNode, type WorkflowEdge, type WorkflowNodeType } from "@/app/lib/workflowTypes";
+import { NODE_DEFS, NODE_ORDER, CATEGORY_ORDER, CATEGORY_META, STEP_CATEGORIES, type WorkflowNode, type WorkflowEdge, type WorkflowNodeType, type WorkflowStepCategory } from "@/app/lib/workflowTypes";
 import { cn } from "@/app/lib/utils";
+import {
+    buildClassName,
+    TEXT_SIZE_OPTIONS,
+    FONT_WEIGHT_OPTIONS,
+    TEXT_ALIGN_OPTIONS,
+    TEXT_COLOR_OPTIONS,
+    BG_COLOR_OPTIONS,
+    DIRECTION_OPTIONS,
+    ITEMS_ALIGN_OPTIONS,
+    JUSTIFY_OPTIONS,
+    GAP_OPTIONS,
+    PADDING_OPTIONS,
+    MARGIN_OPTIONS,
+    ROUNDED_OPTIONS,
+    SHADOW_OPTIONS,
+    WIDTH_OPTIONS,
+    type ClassOption,
+} from "@/app/lib/tailwindClasses";
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 78;
@@ -19,8 +37,8 @@ const CANVAS_HEIGHT = 900;
 
 // Step types that can be dropped into a View's page — see the "Layout"
 // section rendered below for a selected View node, and its server-side
-// counterpart, EMBEDDABLE_TYPES in lib/steps/view.ts.
-const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "textInput", "checkboxInput", "textareaInput", "numberInput", "function", "state"];
+// counterpart, EMBEDDABLE_TYPES in app/lib-server/steps/view.ts.
+const VIEW_BLOCK_TYPES: WorkflowNodeType[] = ["menu", "tabs", "navbar", "footer", "view", "div", "table", "listView", "card", "inputForm", "staticPage", "gap", "label", "link", "image", "textInput", "checkboxInput", "textareaInput", "numberInput", "selectInput", "function", "state"];
 
 // Step types whose inspector gets extra room — a page built visually
 // (View), a form's field list (Input Form), and a full HTML page
@@ -120,6 +138,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         { workflowId: string; workflowName: string; nodeId: string; path: string; method: string }[] | null
     >(null);
     const [stepQuery, setStepQuery] = useState("");
+    const [openCategories, setOpenCategories] = useState<Set<WorkflowStepCategory>>(() => new Set([CATEGORY_ORDER[0]]));
 
     nodesRef.current = nodes;
 
@@ -250,7 +269,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                     // re-drag over an already-connected block shouldn't
                     // reset a position the person may have since dragged
                     // elsewhere in the Layout designer.
-                    if (isNewEdge && target.type === "view") {
+                    if (isNewEdge && (target.type === "view" || target.type === "div")) {
                         setNodes((prev) =>
                             prev.map((n) => {
                                 if (n.id !== target.id) return n;
@@ -388,7 +407,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
         setDirty(true);
     }
 
-    function updateNodeData(nodeId: string, key: string, value: string) {
+    function updateNodeData(nodeId: string, key: string, value: string | boolean) {
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, [key]: value } } : n)));
         setDirty(true);
     }
@@ -452,19 +471,46 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
 
-    const filteredStepTypes = (() => {
-        const q = stepQuery.trim().toLowerCase();
-        if (!q) return NODE_ORDER;
-        return NODE_ORDER.filter((type) => {
-            const def = NODE_DEFS[type];
-            return def.label.toLowerCase().includes(q) || def.description.toLowerCase().includes(q);
+    const q = stepQuery.trim().toLowerCase();
+    const hasQuery = q.length > 0;
+
+    // Every step grouped under its category, in palette order. While
+    // searching, a category's list is narrowed to its matches — the
+    // category itself stays visible only if it has at least one.
+    const categorizedSteps = CATEGORY_ORDER.map((category) => {
+        const types = NODE_ORDER.filter((type) => STEP_CATEGORIES[type] === category);
+        const visible = hasQuery
+            ? types.filter((type) => {
+                  const def = NODE_DEFS[type];
+                  return def.label.toLowerCase().includes(q) || def.description.toLowerCase().includes(q);
+              })
+            : types;
+        return { category, types: visible };
+    });
+    const totalMatches = categorizedSteps.reduce((sum, c) => sum + c.types.length, 0);
+
+    // A category is open if the person opened it manually, OR — while
+    // searching — if it has a match. That second half is what makes a
+    // match "jump out" of a folded section without the person having to
+    // find and open it themselves.
+    function isCategoryOpen(category: WorkflowStepCategory) {
+        if (hasQuery) return categorizedSteps.find((c) => c.category === category)!.types.length > 0;
+        return openCategories.has(category);
+    }
+
+    function toggleCategory(category: WorkflowStepCategory) {
+        setOpenCategories((prev) => {
+            const next = new Set(prev);
+            if (next.has(category)) next.delete(category);
+            else next.add(category);
+            return next;
         });
-    })();
+    }
 
     return (
-        <div className="flex h-[calc(100vh-73px)] flex-col">
+        <div className="flex h-full flex-col overflow-hidden">
             {/* Top bar */}
-            <div className="flex flex-wrap items-center gap-3 border-b border-neutral-200 px-6 py-3">
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-neutral-200 px-6 py-3">
                 <Link href="/d/workflows" className="text-sm text-neutral-500 hover:text-neutral-900">
                     ← Workflows
                 </Link>
@@ -505,34 +551,68 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
 
             <div className="flex min-h-0 flex-1">
                 {/* Palette */}
-                <div className="w-48 shrink-0 overflow-y-auto border-r border-neutral-200 p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Add step</p>
-                    <Input
-                        type="text"
-                        value={stepQuery}
-                        onChange={(e) => setStepQuery(e.target.value)}
-                        placeholder="Search steps…"
-                        className="mb-3"
-                    />
-                    <div className="flex flex-col gap-2">
-                        {filteredStepTypes.map((type) => {
-                            const def = NODE_DEFS[type];
+                <div className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-neutral-200">
+                    {/* This header (title + search) has no scroll behavior
+                        of its own, so it stays put while the category
+                        list below it scrolls — "on top, not moving". */}
+                    <div className="shrink-0 border-b border-neutral-200 p-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Add step</p>
+                        <Input type="text" value={stepQuery} onChange={(e) => setStepQuery(e.target.value)} placeholder="Search steps…" />
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                        {categorizedSteps.map(({ category, types }) => {
+                            if (hasQuery && types.length === 0) return null;
+                            const meta = CATEGORY_META[category];
+                            const open = isCategoryOpen(category);
                             return (
-                                <button
-                                    key={type}
-                                    type="button"
-                                    onClick={() => addNode(type)}
-                                    className="rounded-md border border-neutral-200 px-3 py-2 text-left transition-colors hover:border-neutral-300 hover:bg-neutral-50"
-                                >
-                                    <span className="flex items-center gap-2 text-sm font-medium text-neutral-900">
-                                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: def.color }} />
-                                        {def.label}
-                                    </span>
-                                    <span className="mt-0.5 block text-xs text-neutral-500">{def.description}</span>
-                                </button>
+                                <div key={category} className="mb-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleCategory(category)}
+                                        className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-neutral-50"
+                                    >
+                                        <span className="flex flex-col">
+                                            <span className="text-sm font-semibold text-neutral-900">{meta.label}</span>
+                                            <span className="text-xs text-neutral-400">{meta.blurb}</span>
+                                        </span>
+                                        <span className="flex shrink-0 items-center gap-2">
+                                            <span className="text-xs text-neutral-400">{types.length}</span>
+                                            <svg
+                                                className={cn("h-3.5 w-3.5 text-neutral-400 transition-transform", open && "rotate-90")}
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                            >
+                                                <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    {open && (
+                                        <div className="flex flex-col gap-2 px-1 pb-2 pt-1">
+                                            {types.map((type) => {
+                                                const def = NODE_DEFS[type];
+                                                return (
+                                                    <button
+                                                        key={type}
+                                                        type="button"
+                                                        onClick={() => addNode(type)}
+                                                        className="rounded-md border border-neutral-200 px-3 py-2 text-left transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+                                                    >
+                                                        <span className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                                                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: def.color }} />
+                                                            {def.label}
+                                                        </span>
+                                                        <span className="mt-0.5 block text-xs text-neutral-500">{def.description}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
-                        {filteredStepTypes.length === 0 && <p className="px-1 text-xs text-neutral-400">No steps match “{stepQuery}”.</p>}
+                        {hasQuery && totalMatches === 0 && <p className="px-2 py-4 text-xs text-neutral-400">No steps match "{stepQuery}".</p>}
                     </div>
                 </div>
 
@@ -834,6 +914,114 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                 );
                             })}
 
+                            {selectedNode.type === "class" &&
+                                (() => {
+                                    // A Class step's own inspector is entirely dynamic: which
+                                    // fields make sense depends on whatever this step's output
+                                    // is wired into (drag from its dot onto a Label or a Div) —
+                                    // see app/lib/step-defs/class.ts for why this isn't just a
+                                    // normal `fields` list, and app/lib-server/steps/class.ts +
+                                    // view.ts for how the classes actually reach the page.
+                                    const targetEdge = edges.find((e) => e.source === selectedNode.id);
+                                    const targetNode = targetEdge ? nodes.find((n) => n.id === targetEdge.target) : null;
+                                    const data = selectedNode.data ?? {};
+                                    const preview = buildClassName(data);
+
+                                    const select = (key: string, label: string, options: ClassOption[]) => (
+                                        <div key={key} className="flex flex-col gap-1.5">
+                                            <Label htmlFor={key}>{label}</Label>
+                                            <select
+                                                id={key}
+                                                value={data?.[key] ?? ""}
+                                                onChange={(e) => updateNodeData(selectedNode.id, key, e.target.value)}
+                                                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                            >
+                                                {options.map((opt) => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    );
+
+                                    const toggle = (key: string, label: string) => (
+                                        <label key={key} className="flex items-center gap-2 text-sm text-neutral-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(data?.[key])}
+                                                onChange={(e) => updateNodeData(selectedNode.id, key, e.target.checked)}
+                                                className="h-4 w-4 rounded border-neutral-300"
+                                            />
+                                            {label}
+                                        </label>
+                                    );
+
+                                    return (
+                                        <div className="flex flex-col gap-4">
+                                            {!targetNode ? (
+                                                <p className="text-sm text-neutral-500">
+                                                    Not connected yet. Drag from this step's output dot onto a Label or a Div to see styling options for
+                                                    it — the options shown here change depending which one it's wired into.
+                                                </p>
+                                            ) : targetNode.type === "label" ? (
+                                                <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+                                                    <p className="text-xs font-medium text-neutral-500">Chained into a Label — text styles</p>
+                                                    {select("size", "Size", TEXT_SIZE_OPTIONS)}
+                                                    {select("weight", "Weight", FONT_WEIGHT_OPTIONS)}
+                                                    {select("textAlign", "Align", TEXT_ALIGN_OPTIONS)}
+                                                    {select("textColor", "Text color", TEXT_COLOR_OPTIONS)}
+                                                    {select("bgColor", "Background color", BG_COLOR_OPTIONS)}
+                                                    {toggle("bgSoft", "Soft background (lighter shade)")}
+                                                </div>
+                                            ) : targetNode.type === "div" ? (
+                                                <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+                                                    <p className="text-xs font-medium text-neutral-500">Chained into a Div — layout & spacing</p>
+                                                    {select("direction", "Direction", DIRECTION_OPTIONS)}
+                                                    {select("itemsAlign", "Align items", ITEMS_ALIGN_OPTIONS)}
+                                                    {select("justify", "Justify content", JUSTIFY_OPTIONS)}
+                                                    {select("gap", "Gap", GAP_OPTIONS)}
+                                                    {select("padding", "Padding", PADDING_OPTIONS)}
+                                                    {select("margin", "Margin", MARGIN_OPTIONS)}
+                                                    {select("rounded", "Rounded corners", ROUNDED_OPTIONS)}
+                                                    {select("shadow", "Shadow", SHADOW_OPTIONS)}
+                                                    {select("width", "Width", WIDTH_OPTIONS)}
+                                                    {select("textColor", "Text color", TEXT_COLOR_OPTIONS)}
+                                                    {select("bgColor", "Background color", BG_COLOR_OPTIONS)}
+                                                    {toggle("bgSoft", "Soft background (lighter shade)")}
+                                                    {toggle("border", "Border")}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-neutral-500">
+                                                    Class steps currently style a Label or a Div — {NODE_DEFS[targetNode.type].label} isn't one of those,
+                                                    so nothing here will apply to it.
+                                                </p>
+                                            )}
+
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="custom">Custom classes (advanced)</Label>
+                                                <Input
+                                                    id="custom"
+                                                    value={data?.custom ?? ""}
+                                                    onChange={(e) => updateNodeData(selectedNode.id, "custom", e.target.value)}
+                                                    placeholder="e.g. tracking-wide uppercase"
+                                                />
+                                                <p className="text-xs text-neutral-400">
+                                                    Best effort only — Tailwind only generates CSS for class names it can find in the app's source at
+                                                    build time, so a class typed here works reliably only if it also appears somewhere else in the
+                                                    codebase already. The pickers above are backed by a table of pre-built classes for exactly this
+                                                    reason.
+                                                </p>
+                                            </div>
+
+                                            <div className="rounded-md bg-neutral-50 p-2">
+                                                <p className="text-xs text-neutral-500">Resulting class attribute</p>
+                                                <p className="break-all font-mono text-xs text-neutral-700">{preview || "(none)"}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                             {selectedNode.type === "call" &&
                                 (() => {
                                     const scope = selectedNode.data?.scope === "external" ? "external" : "internal";
@@ -1007,7 +1195,7 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                     );
                                 })()}
 
-                            {selectedNode.type === "view" &&
+                            {(selectedNode.type === "view" || selectedNode.type === "div") &&
                                 (() => {
                                     const layout = parseViewLayout(selectedNode.data?.layout);
                                     const children = edges
@@ -1022,12 +1210,13 @@ export default function WorkflowEditor({ workflow }: WorkflowEditorProps) {
                                             <div>
                                                 <p className="text-sm font-semibold text-neutral-900">Layout</p>
                                                 <p className="text-xs text-neutral-500">
-                                                    Connect a Menu, Tabs, Navbar, Footer, Table, Input Form, Page, Gap, Function, or another View into
-                                                    this step, then drag it below to place it on the page — a 12-column grid. Drag a block's right edge
-                                                    to resize it. A connected Function starts out as an empty slot and fills in with whatever it produced
-                                                    once something calls it. <span className="font-medium text-neutral-600">Scrolls</span> is a normal
-                                                    page that scrolls with its content; <span className="font-medium text-neutral-600">Full screen</span>{" "}
-                                                    fills the browser window, like an app screen.
+                                                    Connect a Menu, Tabs, Navbar, Footer, Table, Input Form, Page, Gap, Function, a Div, or another View
+                                                    into this step, then drag it below to place it on {selectedNode.type === "div" ? "the container" : "the page"}
+                                                    {" "}— a 12-column grid. Drag a block's right edge to resize it. A connected Function starts out as an
+                                                    empty slot and fills in with whatever it produced once something calls it.{" "}
+                                                    <span className="font-medium text-neutral-600">Scrolls</span> is a normal page that scrolls with its
+                                                    content; <span className="font-medium text-neutral-600">Full screen</span> fills the browser window,
+                                                    like an app screen.
                                                 </p>
                                             </div>
 
