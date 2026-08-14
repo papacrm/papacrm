@@ -4,6 +4,17 @@ import { parseFields } from "./inputForm";
 import { resolveListItems, type ListViewItem } from "./listView";
 import { resolveRows, type TableField } from "./table";
 import { nextEdgeTargets, readPath, renderTemplate, type StepContext, type StepExecutor } from "./types";
+import listStep from "./list";
+import findStep from "./find";
+import matchStep from "./match";
+import projectStep from "./project";
+import sortStep from "./sort";
+import limitStep from "./limit";
+import skipStep from "./skip";
+import countStep from "./count";
+import mapperStep from "./mapper";
+import queryStep from "./query";
+import findOneStep from "./findOne";
 
 function escapeHtml(text: string): string {
     return text
@@ -165,6 +176,79 @@ function resolveInputValue(name: string, ctx: StepContext): unknown {
     return readPath(ctx.body, name);
 }
 
+// Steps whose whole job is reshaping the "current data" flowing through
+// the run (see resolveIsolatedBody below) — safe to re-run in isolation
+// because none of them have side effects other than reassigning
+// ctx.body/ctx.body.documents.
+const REPLAYABLE_STEPS: Partial<Record<string, StepExecutor>> = {
+    list: listStep,
+    find: findStep,
+    match: matchStep,
+    project: projectStep,
+    sort: sortStep,
+    limit: limitStep,
+    skip: skipStep,
+    count: countStep,
+    mapper: mapperStep,
+    query: queryStep,
+    findOne: findOneStep,
+};
+
+// A View that embeds more than one Table/List View/Card — e.g. one fed by
+// List → Find → Match and a sibling fed by its own List → Find, both wired
+// into the same View — can't just read `ctx.body` for each of them: by the
+// time this View renders, `ctx.body` is whatever the *last* step to touch
+// it left behind, with no memory of which embedded block it was actually
+// meant for. (Two branches converging on the same View node are executed
+// once per incoming branch — see runWorkflow's fan-out in
+// ../workflowEngine.ts — and each of those executions calls this same
+// resolveChildren, which statically resolves *every* embedded block from
+// whatever ctx that particular execution happens to be carrying. So even
+// with each branch's own `ctx.body` correctly isolated from its sibling,
+// a sibling block embedded in the same View still ends up borrowing
+// whichever branch's data happened to render the page.)
+//
+// The fix: instead of reading the ambient ctx.body, walk backward from the
+// embedded node through its own single-predecessor chain of pure
+// data-shaping steps (List/Find/Match/Project/Sort/Limit/Skip/Count/
+// Mapper/Query/FindOne) and replay just that chain in isolation. Falls
+// back to the ambient ctx.body — exactly the old behavior — the moment the
+// walk can't find such a chain (a branch/join, a non-replayable step, or
+// simply nothing upstream): that's the common case of a single linear
+// pipeline feeding one embedded block, where "whatever the previous step
+// left in context" was already correct.
+async function resolveIsolatedBody(node: IWorkflowNode, nodes: IWorkflowNode[], edges: IWorkflowEdge[], ctx: StepContext): Promise<unknown> {
+    const chain: IWorkflowNode[] = [];
+    const seen = new Set<string>();
+    let currentId: string | undefined = node.id;
+
+    while (currentId) {
+        const incoming = edges.filter((e) => e.target === currentId);
+        if (incoming.length !== 1) break; // no predecessor, or a real join — ambient ctx.body is the best we can do
+        const prevId = incoming[0].source;
+        if (seen.has(prevId)) break; // guard against a cycle in a hand-built graph
+        seen.add(prevId);
+        const prevNode = nodes.find((n) => n.id === prevId);
+        if (!prevNode || !REPLAYABLE_STEPS[prevNode.type]) break;
+        chain.unshift(prevNode);
+        if (prevNode.type === "list") break; // reached this block's own data source — nothing further back to replay
+        currentId = prevId;
+    }
+
+    // Only replay when the chain traces all the way back to its own List —
+    // otherwise we can't tell this apart from the ordinary case (a Table
+    // showing a submitted Input Form, a webhook's JSON body, etc.), where
+    // ambient ctx.body is exactly right and re-deriving it would be wrong.
+    if (chain.length === 0 || chain[0].type !== "list") return ctx.body;
+
+    const replayCtx: StepContext = { ...ctx, body: undefined };
+    for (const step of chain) {
+        const executor = REPLAYABLE_STEPS[step.type]!;
+        await executor.run({ node: step, ctx: replayCtx, trigger: { method: "GET", path: "", query: ctx.query, body: undefined, headers: {}, cookies: {} }, edges, nodes, isEntry: false });
+    }
+    return replayCtx.body;
+}
+
 // Finds every node wired into `view` (an edge whose target is this View)
 // and turns each into the block description View.tsx knows how to render.
 // A block's own StepExecutor.run() is never called here — its `data` is
@@ -201,13 +285,16 @@ async function resolveChildren(view: IWorkflowNode, nodes: IWorkflowNode[], edge
             }
             blocks.push({ type: "tabs", pos, tabs });
         } else if (child.type === "table") {
-            const { fields, documents } = resolveRows(ctx);
+            const isolatedCtx = { ...ctx, body: await resolveIsolatedBody(child, nodes, edges, ctx) };
+            const { fields, documents } = resolveRows(isolatedCtx);
             blocks.push({ type: "table", pos, fields, documents });
         } else if (child.type === "listView") {
-            const { fields, items } = await resolveListItems(child, nodes, edges, ctx);
+            const isolatedCtx = { ...ctx, body: await resolveIsolatedBody(child, nodes, edges, ctx) };
+            const { fields, items } = await resolveListItems(child, nodes, edges, isolatedCtx);
             blocks.push({ type: "listView", pos, title: String(child.data?.title ?? ""), fields, items });
         } else if (child.type === "card") {
-            const { fields, items } = resolveCardItems(child, ctx);
+            const isolatedCtx = { ...ctx, body: await resolveIsolatedBody(child, nodes, edges, ctx) };
+            const { fields, items } = resolveCardItems(child, isolatedCtx);
             blocks.push({ type: "card", pos, title: String(child.data?.title ?? ""), fields, items });
         } else if (child.type === "inputForm") {
             blocks.push({

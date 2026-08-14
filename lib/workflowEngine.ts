@@ -32,11 +32,12 @@ export async function runWorkflow(
     initialSlotBlocks: Record<string, unknown[]> = {},
 ): Promise<WorkflowResult> {
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    // Shared across every branch of the run, including parallel ones — a
-    // step mutates `ctx.body` (e.g. an Input Form's submission) and every
-    // node downstream, on every branch, sees that update. This is the
-    // "context between steps" that lets a page later in the chain read a
-    // value someone typed into a form earlier in the chain.
+    // The "context between steps" that lets a page later in the chain read
+    // a value an earlier step produced (e.g. what someone typed into an
+    // Input Form). Shared by reference all the way down a single chain,
+    // and across a fan-out for everything *except* `body` — see
+    // `cloneBody`/`forkedCtxFor` below for why `body` specifically gets
+    // its own copy per branch instead.
     const ctx: StepContext = {
         query: trigger.query,
         body: trigger.body,
@@ -70,13 +71,29 @@ export async function runWorkflow(
             : undefined;
     const actualStartNodeId = targetStepId && nodeById.has(targetStepId) ? targetStepId : startNodeId;
 
+    // Deep-clones just the "current data" a step like Match/Limit/Sort/
+    // Project reads and reassigns (ctx.body, and ctx.body.documents in
+    // particular). Everything else on StepContext (responseHeaders,
+    // setCookies, slotContent, slotBlocks, viewOutput, htmlAttrs,
+    // clientStyles, clientScripts) stays intentionally shared across
+    // branches — see their field comments in ./steps/types.ts — this only
+    // isolates the one field that downstream steps filter/replace in
+    // place.
+    function cloneBody(body: StepContext["body"]): StepContext["body"] {
+        if (body === null || typeof body !== "object") return body;
+        return typeof structuredClone === "function" ? structuredClone(body) : JSON.parse(JSON.stringify(body));
+    }
+
     // A node can fan out to more than one next node (e.g. one branch saves
-    // to the database while a parallel branch renders the response page).
-    // Each branch is walked independently and recursively; branches run
-    // concurrently via Promise.all. Only one HTTP response can ever be
-    // sent, so once every branch has finished, the first one that actually
-    // produced a result (not just a side effect) wins.
-    async function runFrom(nodeId: string, isEntry: boolean): Promise<WorkflowResult | undefined> {
+    // to the database while a parallel branch renders the response page —
+    // or, just as commonly, two branches independently reshape the same
+    // upstream List with their own Find/Match/Sort/Limit chain, like a
+    // Find→Match→List View next to a sibling Find→List View). Each branch
+    // is walked independently and recursively; branches run concurrently
+    // via Promise.all. Only one HTTP response can ever be sent, so once
+    // every branch has finished, the first one that actually produced a
+    // result (not just a side effect) wins.
+    async function runFrom(nodeId: string, isEntry: boolean, branchCtx: StepContext): Promise<WorkflowResult | undefined> {
         if (stepsRun >= MAX_STEPS) return undefined; // guards against cycles
         stepsRun++;
 
@@ -86,18 +103,28 @@ export async function runWorkflow(
         const executor = STEP_EXECUTORS[node.type];
         if (!executor) return undefined;
 
-        const outcome = await executor.run({ node, ctx, trigger, edges, nodes, isEntry });
+        const outcome = await executor.run({ node, ctx: branchCtx, trigger, edges, nodes, isEntry });
         if (outcome.done) return outcome.result;
 
         // Every node reached from here on is a *chained* step, not the
         // request's own entry point — see StepExecutor.run's `isEntry` doc
         // in ./steps/types.ts for why that distinction matters (Input Form
         // chaining depends on it).
-        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false)));
+        //
+        // Real fan-out (more than one next node) gives each branch its own
+        // copy of `body`, taken at the moment of the split. Without this,
+        // every branch reads and writes the exact same `body` object, so a
+        // step like Match filtering documents in one branch would delete
+        // them out from under a sibling branch's own List View — a race
+        // depending only on which branch happened to run first. A single
+        // next node is just this branch continuing its own chain, so it
+        // keeps sharing `branchCtx` unchanged (no clone needed).
+        const forkedCtxFor = (id: string) => (outcome.nextNodeIds.length > 1 ? { ...branchCtx, body: cloneBody(branchCtx.body) } : branchCtx);
+        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false, forkedCtxFor(id))));
         return branchResults.find((r) => r && r.kind !== "empty") ?? branchResults.find((r) => r !== undefined);
     }
 
-    const result = await runFrom(actualStartNodeId, true);
+    const result = await runFrom(actualStartNodeId, true, ctx);
     const finalResult = result ?? { kind: "empty", status: 204 };
     // Set Header / Set Cookie (see lib/steps/setHeader.ts,
     // lib/steps/setCookie.ts) queue onto the shared ctx rather than
