@@ -7,7 +7,7 @@ import ListTable from "./ListTable";
 import ListItems from "./ListItems";
 import CardGrid from "./CardGrid";
 import WebhookInputForm from "./WebhookInputForm";
-import type { InputFormField } from "../../../lib/steps/inputForm";
+import type { InputFormField } from "../../lib-server/steps/inputForm";
 
 interface ViewBlockPosition {
     col: number;

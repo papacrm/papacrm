@@ -1,5 +1,5 @@
 import { useHtml } from "nukejs";
-import type { InputFormField } from "../../../lib/steps/inputForm";
+import type { InputFormField } from "../../lib-server/steps/inputForm";
 import ListTable from "./ListTable";
 import WebhookInputForm from "./WebhookInputForm";
 

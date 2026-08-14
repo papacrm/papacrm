@@ -1,9 +1,9 @@
 import { ORPCError } from "@orpc/server";
-import { authed } from "../../lib/orpc/auth";
-import { connectDB } from "../../lib/mongoose";
-import List from "../../lib/models/List";
-import ListDocument from "../../lib/models/ListDocument";
-import { sanitizeDocumentData } from "../../lib/listValidation";
+import { authed } from "../lib-server/orpc/auth";
+import { connectDB } from "../lib-server/mongoose";
+import List from "../lib-server/models/List";
+import ListDocument from "../lib-server/models/ListDocument";
+import { sanitizeDocumentData } from "../lib-server/listValidation";
 
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 const DEFAULT_PAGE_SIZE = 20;

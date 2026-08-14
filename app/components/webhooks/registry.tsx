@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { WorkflowPageComponent } from "../../../lib/steps/types";
+import type { WorkflowPageComponent } from "../../lib-server/steps/types";
 import StaticPage from "./StaticPage";
 import InputFormPage from "./InputFormPage";
 import Table from "./Table";

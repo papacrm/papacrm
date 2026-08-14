@@ -1,5 +1,5 @@
 import { useHtml } from "nukejs";
-import type { InputFormField } from "../../../lib/steps/inputForm";
+import type { InputFormField } from "../../lib-server/steps/inputForm";
 
 interface WebhookInputFormProps {
   fields: InputFormField[];
@@ -8,7 +8,7 @@ interface WebhookInputFormProps {
   // render below) so the engine can tell this specific form's
   // submission apart from any other Input Form's — every step in a
   // Webhook → Input Form → Input Form chain shares one URL. See
-  // runWorkflow in ../../../lib/workflowEngine.ts.
+  // runWorkflow in ../../lib-server/workflowEngine.ts.
   stepId: string;
 }
 

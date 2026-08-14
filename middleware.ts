@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { renderComponent } from "nukejs/server";
-import { readCookies, REFRESH_COOKIE_NAME } from "./lib/cookies";
+import { readCookies, REFRESH_COOKIE_NAME } from "./app/lib-server/cookies";
 import { stringifySetCookie } from "cookie";
-import { verifyRefreshToken } from "./lib/jwt";
-import { connectDB } from "./lib/mongoose";
-import Workflow from "./lib/models/Workflow";
-import { findWebhookNode, runWorkflow } from "./lib/workflowEngine";
+import { verifyRefreshToken } from "./app/lib-server/jwt";
+import { connectDB } from "./app/lib-server/mongoose";
+import Workflow from "./app/lib-server/models/Workflow";
+import { findWebhookNode, runWorkflow } from "./app/lib-server/workflowEngine";
 import { WEBHOOK_PAGE_COMPONENTS } from "./app/components/webhooks/registry";
 import { withPageExtras } from "./app/components/webhooks/PageExtras";
 import RootLayout from "./app/pages/layout";
@@ -232,12 +232,12 @@ if (isDev) {
 // That platform layer is pure trouble here:
 //   1. Its default runtime is Edge, which has no Node builtins (fs, net,
 //      tls, dns, child_process, ...) — mongoose/mongodb, the `cookie`
-//      package, and `jsonwebtoken` (via ./lib/jwt) can't even be bundled
+//      package, and `jsonwebtoken` (via ./app/lib-server/jwt) can't even be bundled
 //      for it ("Edge Function 'middleware' is referencing unsupported
 //      modules").
 //   2. Even switched to `runtime: "nodejs"`, it transpiles this file in
 //      isolation rather than bundling it (unlike nuke's own esbuild step),
-//      so relative imports like "./lib/cookies" and
+//      so relative imports like "./app/lib-server/cookies" and
 //      "./app/components/webhooks/registry" are left unresolved for
 //      Node's strict ESM loader (ERR_MODULE_NOT_FOUND).
 //   3. Its call signature — `(request: Request, context: { waitUntil })` —

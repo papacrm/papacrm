@@ -1,6 +1,6 @@
 "use client";
 
-import type { AccessTokenPayload } from "@/lib/jwt";
+import type { AccessTokenPayload } from "@/app/lib-server/jwt";
 
 const ACCESS_COOKIE_NAME = "access_token";
 

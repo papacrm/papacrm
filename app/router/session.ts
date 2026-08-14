@@ -1,15 +1,15 @@
 import { ORPCError } from "@orpc/server";
-import { pub, authed } from "../../lib/orpc/auth";
-import { connectDB } from "../../lib/mongoose";
-import User from "../../lib/models/User";
+import { pub, authed } from "../lib-server/orpc/auth";
+import { connectDB } from "../lib-server/mongoose";
+import User from "../lib-server/models/User";
 import {
     readCookies,
     REFRESH_COOKIE_NAME,
     setAccessCookie,
     clearAuthCookies,
-} from "../../lib/cookies";
-import { signAccessToken, verifyRefreshToken, ACCESS_TOKEN_TTL_SECONDS } from "../../lib/jwt";
-import { getPermissionsForUser } from "../../lib/permissions";
+} from "../lib-server/cookies";
+import { signAccessToken, verifyRefreshToken, ACCESS_TOKEN_TTL_SECONDS } from "../lib-server/jwt";
+import { getPermissionsForUser } from "../lib-server/permissions";
 
 // Mints a fresh access token from a valid refresh token. Called by the
 // client automatically after any protected call comes back 401 — see

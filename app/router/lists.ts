@@ -1,9 +1,9 @@
 import { ORPCError } from "@orpc/server";
-import { authed } from "../../lib/orpc/auth";
-import { connectDB } from "../../lib/mongoose";
-import List from "../../lib/models/List";
-import ListDocument from "../../lib/models/ListDocument";
-import { sanitizeFields } from "../../lib/listValidation";
+import { authed } from "../lib-server/orpc/auth";
+import { connectDB } from "../lib-server/mongoose";
+import List from "../lib-server/models/List";
+import ListDocument from "../lib-server/models/ListDocument";
+import { sanitizeFields } from "../lib-server/listValidation";
 
 const MAX_NAME_LENGTH = 120;
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;

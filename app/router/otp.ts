@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
-import { pub } from "../../lib/orpc/auth";
-import { connectDB } from "../../lib/mongoose";
-import User from "../../lib/models/User";
+import { pub } from "../lib-server/orpc/auth";
+import { connectDB } from "../lib-server/mongoose";
+import User from "../lib-server/models/User";
 import { EMAIL_RE, OTP_TTL_SECONDS, generateOtp, issueSession } from "./helpers";
 
 // Step 1 of login: collect an email address, issue + "send" an OTP.

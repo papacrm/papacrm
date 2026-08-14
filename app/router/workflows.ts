@@ -1,8 +1,8 @@
 import { ORPCError } from "@orpc/server";
-import { authed } from "../../lib/orpc/auth";
-import { connectDB } from "../../lib/mongoose";
-import Workflow from "../../lib/models/Workflow";
-import { STEP_EXECUTORS } from "../../lib/steps";
+import { authed } from "../lib-server/orpc/auth";
+import { connectDB } from "../lib-server/mongoose";
+import Workflow from "../lib-server/models/Workflow";
+import { STEP_EXECUTORS } from "../lib-server/steps";
 
 // Derived from the step registry (lib/steps) rather than hand-listed here —
 // a type only has to be registered once, in lib/steps/index.ts, to be

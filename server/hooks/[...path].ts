@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { renderComponent } from "nukejs/server";
 import { parseCookie, stringifySetCookie } from "cookie";
-import { connectDB } from "../../lib/mongoose";
-import Workflow from "../../lib/models/Workflow";
-import { findWebhookNode, runWorkflow } from "../../lib/workflowEngine";
+import { connectDB } from "../../app/lib-server/mongoose";
+import Workflow from "../../app/lib-server/models/Workflow";
+import { findWebhookNode, runWorkflow } from "../../app/lib-server/workflowEngine";
 import { WEBHOOK_PAGE_COMPONENTS } from "@/app/components/webhooks/registry";
 import { withPageExtras } from "@/app/components/webhooks/PageExtras";
 import RootLayout from "@/app/pages/layout";

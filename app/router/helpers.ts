@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
-import { setAccessCookie, setRefreshCookie } from "../../lib/cookies";
-import { signAccessToken, signRefreshToken } from "../../lib/jwt";
-import { getPermissionsForUser } from "../../lib/permissions";
+import { setAccessCookie, setRefreshCookie } from "../lib-server/cookies";
+import { signAccessToken, signRefreshToken } from "../lib-server/jwt";
+import { getPermissionsForUser } from "../lib-server/permissions";
 
 export const OTP_TTL_SECONDS = 120; // 2 minutes
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
