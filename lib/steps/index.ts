@@ -46,6 +46,8 @@ import projectStep from "./project";
 import sortStep from "./sort";
 import limitStep from "./limit";
 import skipStep from "./skip";
+import listStep from "./list";
+import countStep from "./count";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `lib/steps/<name>.ts` exporting a StepExecutor (copy an
@@ -102,6 +104,8 @@ export const STEP_EXECUTORS: Record<WorkflowNodeType, StepExecutor> = {
     sort: sortStep,
     limit: limitStep,
     skip: skipStep,
+    list: listStep,
+    count: countStep,
 };
 
 export * from "./types";

@@ -45,6 +45,8 @@ import projectStep from "./project";
 import sortStep from "./sort";
 import limitStep from "./limit";
 import skipStep from "./skip";
+import listStep from "./list";
+import countStep from "./count";
 
 // ─── Adding a new step ──────────────────────────────────────────────────
 // 1. Create `app/lib/steps/<name>.ts` exporting a WorkflowNodeDef (copy an
@@ -102,6 +104,8 @@ export const NODE_DEFS: Record<WorkflowNodeType, WorkflowNodeDef> = {
     sort: sortStep,
     limit: limitStep,
     skip: skipStep,
+    list: listStep,
+    count: countStep,
 };
 
 export const NODE_ORDER: WorkflowNodeType[] = [
@@ -151,6 +155,8 @@ export const NODE_ORDER: WorkflowNodeType[] = [
     "sort",
     "limit",
     "skip",
+    "list",
+    "count",
 ];
 
 export * from "./types";

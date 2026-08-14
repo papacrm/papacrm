@@ -49,7 +49,9 @@ export type WorkflowNodeType =
     | "project"
     | "sort"
     | "limit"
-    | "skip";
+    | "skip"
+    | "list"
+    | "count";
 
 export interface WorkflowNode {
     id: string;

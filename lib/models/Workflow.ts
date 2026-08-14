@@ -49,7 +49,9 @@ export type WorkflowNodeType =
     | "project"
     | "sort"
     | "limit"
-    | "skip";
+    | "skip"
+    | "list"
+    | "count";
 
 export interface IWorkflowNode {
     id: string;
@@ -132,6 +134,8 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>(
                 "sort",
                 "limit",
                 "skip",
+                "list",
+                "count",
             ],
         },
         x: { type: Number, required: true, default: 0 },
