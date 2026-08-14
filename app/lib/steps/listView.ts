@@ -14,7 +14,7 @@ const listViewStep: WorkflowNodeDef = {
     kind: "action",
     fields: [{ key: "title", label: "Title", kind: "text", placeholder: "Recent submissions" }],
     defaultData: () => ({ title: "Records" }),
-    summarize: () => "Shows the previous step's data as a list",
+    summarize: (data) => `${data?.title || "List"}: shows the previous step's data as a list`,
     inspectorNote: () => ({
         label: "Tip",
         value: "Feed this from a Query step, an Input Form, or a webhook's own query string/POST body, same as Table. Chain a View, Card, or Link into it to control how each item looks.",
