@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, Link } from "nukejs";
 import { ORPCError } from "@orpc/client";
 import { orpc, withAuthRetry } from "@/client";
@@ -23,6 +23,8 @@ export default function ModulesList() {
     const [newName, setNewName] = useState("");
     const [creating, setCreating] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [importing, setImporting] = useState(false);
+    const importInputRef = useRef<HTMLInputElement>(null);
 
     async function load() {
         try {
@@ -65,13 +67,67 @@ export default function ModulesList() {
         }
     }
 
+    // Pairs with ModuleEditor's Export: reads the JSON file the person
+    // picks, does just enough shape-checking to give a clear error
+    // instead of a confusing server one, then creates a brand-new
+    // module from it (never overwrites an existing one). The server
+    // still re-validates every node/edge itself (see sanitizeNodes /
+    // sanitizeEdges in router/modules.ts) and always creates it
+    // Inactive, regardless of what the file says — this parse is purely
+    // for a friendlier error message, not the actual trust boundary.
+    function handleImportClick() {
+        importInputRef.current?.click();
+    }
+
+    async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+
+        setError(null);
+        setImporting(true);
+        try {
+            const text = await file.text();
+            let parsed: any;
+            try {
+                parsed = JSON.parse(text);
+            } catch {
+                throw new Error("That file isn't valid JSON.");
+            }
+            if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.nodes)) {
+                throw new Error("That doesn't look like an exported module — expected an object with a \"nodes\" array.");
+            }
+
+            const module = await withAuthRetry(() =>
+                orpc.module.create({
+                    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Imported module",
+                    nodes: parsed.nodes,
+                    edges: Array.isArray(parsed.edges) ? parsed.edges : [],
+                }),
+            );
+            router.push(`/d/modules/${(module as any)._id}`);
+        } catch (err) {
+            setError(err instanceof ORPCError ? err.message : err instanceof Error ? err.message : "Couldn't import that file.");
+        } finally {
+            setImporting(false);
+        }
+    }
+
     return (
         <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Modules</h1>
-                <p className="mt-1 text-sm text-neutral-500">
-                    Build automations from a webhook trigger, an HTTP request, a condition, and a static page response.
-                </p>
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Modules</h1>
+                    <p className="mt-1 text-sm text-neutral-500">
+                        Build automations from a webhook trigger, an HTTP request, a condition, and a static page response.
+                    </p>
+                </div>
+                <div className="shrink-0">
+                    <input ref={importInputRef} type="file" accept="application/json,.json" onChange={handleImportFile} className="hidden" />
+                    <Button type="button" variant="outline" size="sm" onClick={handleImportClick} disabled={importing}>
+                        {importing ? "Importing…" : "Import"}
+                    </Button>
+                </div>
             </div>
 
             <Card>

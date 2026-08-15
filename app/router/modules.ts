@@ -127,11 +127,25 @@ export const get = authed.handler(async ({ input, context }) => {
     return serializeModule(module);
 });
 
+// Plain `create` (from the "New module" form) only ever sends `name`, so
+// this stays backward compatible — nodes/edges/active are only present
+// when this is called from Import (see ModulesList.tsx's handleImport),
+// and go through the exact same sanitizers as update() so an imported
+// file can't smuggle in an unrecognised node type or a dangling edge.
 export const create = authed.handler(async ({ input, context }) => {
-    const name = String((input as any)?.name ?? "").trim().slice(0, MAX_NAME_LENGTH) || "Untitled module";
+    const body = (input as any) ?? {};
+    const name = String(body.name ?? "").trim().slice(0, MAX_NAME_LENGTH) || "Untitled module";
+    const nodes = sanitizeNodes(body.nodes);
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges = sanitizeEdges(body.edges, nodeIds);
+    // Always start Inactive, even for an import whose file says
+    // active: true — matches "New module"'s existing safety default, so
+    // an imported module (which may contain a public Webhook node)
+    // can't go live before its owner has actually looked at it.
+    const active = false;
 
     await connectDB();
-    const module = await Module.create({ owner: context.user._id, name, nodes: [], edges: [], active: false });
+    const module = await Module.create({ owner: context.user._id, name, nodes, edges, active });
     return serializeModule(module);
 });
 
