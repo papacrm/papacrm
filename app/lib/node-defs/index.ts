@@ -37,6 +37,7 @@ import labelNode from "./label";
 import linkNode from "./link";
 import divNode from "./div";
 import classNode from "./class";
+import styleNode from "./style";
 import textInputNode from "./textInput";
 import checkboxInputNode from "./checkboxInput";
 import textareaInputNode from "./textareaInput";
@@ -105,6 +106,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     link: linkNode,
     div: divNode,
     class: classNode,
+    style: styleNode,
     textInput: textInputNode,
     checkboxInput: checkboxInputNode,
     textareaInput: textareaInputNode,
@@ -148,6 +150,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "link",
     "div",
     "class",
+    "style",
     "image",
     "textInput",
     "checkboxInput",
@@ -257,6 +260,7 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     link: "blocks",
     div: "blocks",
     class: "blocks",
+    style: "blocks",
     image: "blocks",
     html: "blocks",
     css: "blocks",

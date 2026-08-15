@@ -42,6 +42,7 @@ export type ModuleNodeType =
     | "link"
     | "div"
     | "class"
+    | "style"
     | "textInput"
     | "checkboxInput"
     | "textareaInput"

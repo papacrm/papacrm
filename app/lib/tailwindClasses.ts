@@ -338,6 +338,91 @@ export const WIDTH_OPTIONS: ClassOption[] = [
 // Boolean toggle — only one literal class needed, so no lookup table.
 export const BORDER_CLASS = "border border-neutral-200";
 
+// ─── Fixed size (Image) ──────────────────────────────────────────────────
+// Div's WIDTH_CLASS above is relative (auto/full/half/1-3rd/...) — right
+// for a layout container, but an Image usually wants a concrete size (a
+// 20-unit avatar, a 32-unit thumbnail) instead of a fraction of its
+// parent. Same literal-class-table trick as everywhere else in this file:
+// every entry here is a complete class name Tailwind's build can find.
+export const IMAGE_WIDTH_CLASS: Record<string, string> = {
+    "8": "w-8",
+    "10": "w-10",
+    "12": "w-12",
+    "16": "w-16",
+    "20": "w-20",
+    "24": "w-24",
+    "32": "w-32",
+    "40": "w-40",
+    "48": "w-48",
+    "64": "w-64",
+    auto: "w-auto",
+    full: "w-full",
+};
+
+export const IMAGE_WIDTH_OPTIONS: ClassOption[] = [
+    OPTION("", "Default"),
+    OPTION("8", "8 (2rem)"),
+    OPTION("10", "10 (2.5rem)"),
+    OPTION("12", "12 (3rem)"),
+    OPTION("16", "16 (4rem)"),
+    OPTION("20", "20 (5rem)"),
+    OPTION("24", "24 (6rem)"),
+    OPTION("32", "32 (8rem)"),
+    OPTION("40", "40 (10rem)"),
+    OPTION("48", "48 (12rem)"),
+    OPTION("64", "64 (16rem)"),
+    OPTION("auto", "Auto"),
+    OPTION("full", "Full (100%)"),
+];
+
+export const IMAGE_HEIGHT_CLASS: Record<string, string> = {
+    "8": "h-8",
+    "10": "h-10",
+    "12": "h-12",
+    "16": "h-16",
+    "20": "h-20",
+    "24": "h-24",
+    "32": "h-32",
+    "40": "h-40",
+    "48": "h-48",
+    "64": "h-64",
+    auto: "h-auto",
+    full: "h-full",
+};
+
+export const IMAGE_HEIGHT_OPTIONS: ClassOption[] = [
+    OPTION("", "Default"),
+    OPTION("8", "8 (2rem)"),
+    OPTION("10", "10 (2.5rem)"),
+    OPTION("12", "12 (3rem)"),
+    OPTION("16", "16 (4rem)"),
+    OPTION("20", "20 (5rem)"),
+    OPTION("24", "24 (6rem)"),
+    OPTION("32", "32 (8rem)"),
+    OPTION("40", "40 (10rem)"),
+    OPTION("48", "48 (12rem)"),
+    OPTION("64", "64 (16rem)"),
+    OPTION("auto", "Auto"),
+    OPTION("full", "Full (100%)"),
+];
+
+// How the image fills its box once width/height above no longer match
+// its natural aspect ratio.
+export const OBJECT_FIT_CLASS: Record<string, string> = {
+    cover: "object-cover",
+    contain: "object-contain",
+    fill: "object-fill",
+    none: "object-none",
+};
+
+export const OBJECT_FIT_OPTIONS: ClassOption[] = [
+    OPTION("", "Default"),
+    OPTION("cover", "Cover (crop to fill)"),
+    OPTION("contain", "Contain (fit inside)"),
+    OPTION("fill", "Fill (stretch)"),
+    OPTION("none", "None (natural size)"),
+];
+
 // ─── The data shape stored on a Class node ──────────────────────────────
 export interface ClassNodeData {
     // Label-oriented
@@ -359,6 +444,14 @@ export interface ClassNodeData {
     shadow?: string;
     width?: string;
     border?: boolean;
+    // Image-oriented — fixed sizes rather than Div's relative WIDTH_CLASS,
+    // see IMAGE_WIDTH_CLASS/IMAGE_HEIGHT_CLASS above. Kept as separate
+    // keys from `width` so a Class node reused on both a Div and an
+    // Image (unusual, but nothing stops it) never has the two fight over
+    // the same field.
+    imgWidth?: string;
+    imgHeight?: string;
+    objectFit?: string;
     // Escape hatch for anything the pickers above don't cover. Best
     // effort only — unlike every class above, arbitrary text typed here
     // isn't guaranteed to survive the Tailwind build unless that exact
@@ -398,6 +491,10 @@ export function buildClassName(data: ClassNodeData | null | undefined): string {
     if (data.shadow && SHADOW_CLASS[data.shadow]) classes.push(SHADOW_CLASS[data.shadow]);
     if (data.width && WIDTH_CLASS[data.width]) classes.push(WIDTH_CLASS[data.width]);
     if (data.border) classes.push(BORDER_CLASS);
+
+    if (data.imgWidth && IMAGE_WIDTH_CLASS[data.imgWidth]) classes.push(IMAGE_WIDTH_CLASS[data.imgWidth]);
+    if (data.imgHeight && IMAGE_HEIGHT_CLASS[data.imgHeight]) classes.push(IMAGE_HEIGHT_CLASS[data.imgHeight]);
+    if (data.objectFit && OBJECT_FIT_CLASS[data.objectFit]) classes.push(OBJECT_FIT_CLASS[data.objectFit]);
 
     if (data.custom) classes.push(data.custom.trim());
 

@@ -16,6 +16,7 @@ import mapperNode from "./mapper";
 import queryNode from "./query";
 import findOneNode from "./findOne";
 import { resolveClassName } from "./class";
+import { resolveStyleAttr } from "./style";
 
 function escapeHtml(text: string): string {
     return text
@@ -107,10 +108,10 @@ export type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; nodeId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string }
-    | { type: "div"; pos: ViewBlockPosition; className?: string; blocks: ViewBlock[] }
+    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string; style?: string }
+    | { type: "div"; pos: ViewBlockPosition; className?: string; style?: string; layoutMode: "grid" | "flow"; blocks: ViewBlock[] }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
-    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string }
+    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string; className?: string; style?: string }
     | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
     | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
@@ -151,6 +152,40 @@ function resolvePosition(layout: Record<string, Partial<ViewBlockPosition>>, nod
     const row = Number.isFinite(Number(entry.row)) ? Number(entry.row) : 0;
     const height = entry.height === "full" ? "full" : "auto";
     return { col, span, row, height };
+}
+
+// True when a layout entry represents a deliberate resize/reposition
+// rather than the trivial one the editor auto-assigns the moment a block
+// is wired in (see the "isNewEdge && target.type === view/div" branch in
+// ModuleEditor.tsx: {col: 0, span: 12, row: maxRow + 1, height: "auto"}).
+// Row is deliberately excluded — it only ever records *stacking order*
+// (bumped automatically on every new connection), never a deliberate
+// size/position choice, so two untouched blocks always differ in row
+// without that meaning either was "positioned" by hand. col/span/height
+// are the only fields the Layout designer's drag-to-move/drag-to-resize
+// actually changes away from their defaults — see hasCustomLayout below.
+function hasCustomPosition(entry: Partial<ViewBlockPosition> | undefined): boolean {
+    if (!entry) return false;
+    const col = Number(entry.col);
+    const span = Number(entry.span);
+    if (Number.isFinite(col) && col !== 0) return true;
+    if (Number.isFinite(span) && span !== 12) return true;
+    if (entry.height === "full") return true;
+    return false;
+}
+
+// A Div defaults to laying its children out as a plain flex container
+// (see the "div" branch in resolveChildren and BlockGrid.tsx) so its own
+// Class-node flex settings (direction/itemsAlign/justify/gap — see
+// tailwindClasses.ts) apply directly to its children. It only switches
+// to the 12-column grid-with-explicit-positions system — the same one a
+// View uses — once the person has actually dragged/resized a block
+// inside it in the Layout designer; until then, forcing `grid
+// grid-cols-12 gap-6` onto every Div regardless of whether anyone asked
+// for grid placement fights whatever flex layout the Class node set up.
+function hasCustomLayout(node: IModuleNode): boolean {
+    const layout = parseLayout(node);
+    return Object.values(layout).some(hasCustomPosition);
 }
 
 function parseLinks(raw: unknown): { label: string; href: string }[] {
@@ -322,11 +357,14 @@ async function resolveChildren(view: IModuleNode, nodes: IModuleNode[], edges: I
         } else if (child.type === "label") {
             const text = renderTemplate(String(child.data?.field ?? ""), ctx);
             const className = resolveClassName(child, nodes, edges);
-            blocks.push({ type: "label", pos, text, className: className || undefined });
+            const style = resolveStyleAttr(child, nodes, edges, ctx);
+            blocks.push({ type: "label", pos, text, className: className || undefined, style: style || undefined });
         } else if (child.type === "div") {
             const className = resolveClassName(child, nodes, edges);
+            const style = resolveStyleAttr(child, nodes, edges, ctx);
+            const layoutMode: "grid" | "flow" = hasCustomLayout(child) ? "grid" : "flow";
             const nestedBlocks = await resolveChildren(child, nodes, edges, ctx, depth + 1);
-            blocks.push({ type: "div", pos, className: className || undefined, blocks: nestedBlocks });
+            blocks.push({ type: "div", pos, className: className || undefined, style: style || undefined, layoutMode, blocks: nestedBlocks });
         } else if (child.type === "link") {
             const href = renderTemplate(String(child.data?.href ?? ""), ctx);
             const labelNode = findChainedLabel(child, nodes, edges);
@@ -343,7 +381,13 @@ async function resolveChildren(view: IModuleNode, nodes: IModuleNode[], edges: I
             blocks.push({ type: "link", pos, href, text, blocks: linkBlocks });
         } else if (child.type === "image") {
             const src = renderTemplate(String(child.data?.src ?? ""), ctx);
-            blocks.push({ type: "image", pos, src, alt: String(child.data?.alt ?? "") });
+            // A Class or Style node can be chained onto an Image the same
+            // way as a Label or Div — see IMAGE_WIDTH_OPTIONS/
+            // IMAGE_HEIGHT_OPTIONS in tailwindClasses.ts and the "image"
+            // case in ModuleEditor.tsx's Class inspector.
+            const className = resolveClassName(child, nodes, edges);
+            const style = resolveStyleAttr(child, nodes, edges, ctx);
+            blocks.push({ type: "image", pos, src, alt: String(child.data?.alt ?? ""), className: className || undefined, style: style || undefined });
         } else if (child.type === "textInput") {
             const name = String(child.data?.name ?? "");
             const value = resolveInputValue(name, ctx);

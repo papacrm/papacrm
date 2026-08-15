@@ -38,6 +38,7 @@ import labelNode from "./label";
 import linkNode from "./link";
 import divNode from "./div";
 import classNode from "./class";
+import styleNode from "./style";
 import textInputNode from "./textInput";
 import checkboxInputNode from "./checkboxInput";
 import textareaInputNode from "./textareaInput";
@@ -105,6 +106,7 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     link: linkNode,
     div: divNode,
     class: classNode,
+    style: styleNode,
     textInput: textInputNode,
     checkboxInput: checkboxInputNode,
     textareaInput: textareaInputNode,

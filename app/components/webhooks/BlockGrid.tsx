@@ -1,5 +1,5 @@
 import { Link } from "nukejs";
-import { cn } from "../../lib/utils";
+import { cn, parseInlineStyle } from "../../lib/utils";
 import Menu, { type MenuLink } from "./Menu";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
@@ -40,10 +40,10 @@ type ViewBlock =
     | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; nodeId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
-    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string }
-    | { type: "div"; pos: ViewBlockPosition; className?: string; blocks: ViewBlock[] }
+    | { type: "label"; pos: ViewBlockPosition; text: string; className?: string; style?: string }
+    | { type: "div"; pos: ViewBlockPosition; className?: string; style?: string; layoutMode: "grid" | "flow"; blocks: ViewBlock[] }
     | { type: "link"; pos: ViewBlockPosition; href: string; text?: string; blocks?: ViewBlock[] }
-    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string }
+    | { type: "image"; pos: ViewBlockPosition; src: string; alt: string; className?: string; style?: string }
     | { type: "textInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
     | { type: "checkboxInput"; pos: ViewBlockPosition; name: string; label: string; checked: boolean }
     | { type: "textareaInput"; pos: ViewBlockPosition; name: string; label: string; placeholder: string; value: string }
@@ -61,6 +61,20 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     style={{ gridColumn: `${block.pos.col + 1} / span ${block.pos.span}`, gridRow: block.pos.row + 1 }}
                     className={block.pos.height === "full" ? "flex min-h-screen flex-col justify-center" : undefined}
                 >
+                    <BlockContent block={block} />
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// Every block type's own markup, factored out of the grid-item wrapper
+// above so it can be reused verbatim by a Div in "flow" mode (see the
+// "div" case below) — there, a block sits directly among its siblings as
+// a flex item, with no per-block grid-position wrapper around it at all.
+function BlockContent({ block }: { block: ViewBlock }) {
+    return (
+        <>
                     {block.type === "menu" && <Menu links={block.links} orientation={block.orientation} />}
                     {block.type === "navbar" && <Navbar brand={block.brand} links={block.links} />}
                     {block.type === "footer" && <Footer text={block.text} links={block.links} />}
@@ -86,12 +100,33 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}
                     {block.type === "gap" && <div style={{ height: block.size }} aria-hidden="true" />}
-                    {block.type === "label" && <p className={cn("text-neutral-700", block.className)}>{block.text}</p>}
-                    {block.type === "div" && (
-                        <div className={cn(block.className)}>
-                            <BlockGrid blocks={block.blocks} />
-                        </div>
+                    {block.type === "label" && (
+                        <p className={cn("text-neutral-700", block.className)} style={parseInlineStyle(block.style)}>
+                            {block.text}
+                        </p>
                     )}
+                    {block.type === "div" &&
+                        (block.layoutMode === "grid" ? (
+                            // At least one child was deliberately dragged/resized in
+                            // the Layout designer — keep the explicit 12-column grid
+                            // so those positions still mean something (see
+                            // hasCustomLayout in lib-server/nodes/view.ts).
+                            <div className={cn(block.className)} style={parseInlineStyle(block.style)}>
+                                <BlockGrid blocks={block.blocks} />
+                            </div>
+                        ) : (
+                            // Nobody's touched this Div's layout — render its children
+                            // directly as its own flex items instead of nesting another
+                            // "grid grid-cols-12 gap-6" box inside it. That's what lets a
+                            // Class node's flex settings (direction/itemsAlign/justify/
+                            // gap) on this Div actually reach its children rather than
+                            // being overridden by a forced grid one level down.
+                            <div className={cn(block.className)} style={parseInlineStyle(block.style)}>
+                                {block.blocks.map((child, j) => (
+                                    <BlockContent key={j} block={child} />
+                                ))}
+                            </div>
+                        ))}
                     {block.type === "link" && (
                         <Link href={block.href} className="inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
                             {block.blocks ? <BlockGrid blocks={block.blocks} /> : block.text || "Click here"}
@@ -99,7 +134,12 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     )}
                     {block.type === "image" && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={block.src} alt={block.alt} className="h-auto max-w-full rounded-md" />
+                        <img
+                            src={block.src}
+                            alt={block.alt}
+                            className={cn("h-auto max-w-full rounded-md", block.className)}
+                            style={parseInlineStyle(block.style)}
+                        />
                     )}
                     {block.type === "textInput" && (
                         <div className="flex flex-col gap-1">
@@ -153,8 +193,6 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                             <BlockGrid blocks={block.blocks} />
                         </div>
                     )}
-                </div>
-            ))}
-        </div>
+        </>
     );
 }

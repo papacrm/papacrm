@@ -28,6 +28,9 @@ import {
     ROUNDED_OPTIONS,
     SHADOW_OPTIONS,
     WIDTH_OPTIONS,
+    IMAGE_WIDTH_OPTIONS,
+    IMAGE_HEIGHT_OPTIONS,
+    OBJECT_FIT_OPTIONS,
     type ClassOption,
 } from "@/app/lib/tailwindClasses";
 
@@ -1045,8 +1048,8 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                                         <div className="flex flex-col gap-4">
                                             {!targetNode ? (
                                                 <p className="text-sm text-neutral-500">
-                                                    Not connected yet. Drag from this node's output dot onto a Label or a Div to see styling options for
-                                                    it — the options shown here change depending which one it's wired into.
+                                                    Not connected yet. Drag from this node's output dot onto a Label, Div, or Image to see styling
+                                                    options for it — the options shown here change depending which one it's wired into.
                                                 </p>
                                             ) : targetNode.type === "label" ? (
                                                 <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
@@ -1075,10 +1078,21 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                                                     {toggle("bgSoft", "Soft background (lighter shade)")}
                                                     {toggle("border", "Border")}
                                                 </div>
+                                            ) : targetNode.type === "image" ? (
+                                                <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+                                                    <p className="text-xs font-medium text-neutral-500">Chained into an Image — size & fit</p>
+                                                    {select("imgWidth", "Width", IMAGE_WIDTH_OPTIONS)}
+                                                    {select("imgHeight", "Height", IMAGE_HEIGHT_OPTIONS)}
+                                                    {select("objectFit", "Object fit", OBJECT_FIT_OPTIONS)}
+                                                    {select("rounded", "Rounded corners", ROUNDED_OPTIONS)}
+                                                    {select("shadow", "Shadow", SHADOW_OPTIONS)}
+                                                    {select("margin", "Margin", MARGIN_OPTIONS)}
+                                                    {toggle("border", "Border")}
+                                                </div>
                                             ) : (
                                                 <p className="text-sm text-neutral-500">
-                                                    Class nodes currently style a Label or a Div — {NODE_DEFS[targetNode.type].label} isn't one of those,
-                                                    so nothing here will apply to it.
+                                                    Class nodes currently style a Label, Div, or Image — {NODE_DEFS[targetNode.type].label} isn't one
+                                                    of those, so nothing here will apply to it.
                                                 </p>
                                             )}
 
@@ -1103,6 +1117,35 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                                                 <p className="break-all font-mono text-xs text-neutral-700">{preview || "(none)"}</p>
                                             </div>
                                         </div>
+                                    );
+                                })()}
+
+                            {selectedNode.type === "style" &&
+                                (() => {
+                                    // Same wiring gesture as Class above, just simpler: Style
+                                    // has no per-target field set (it's raw CSS, handled by the
+                                    // generic textarea field rendered above), so all that's
+                                    // custom here is telling the person what it's currently
+                                    // wired into — see findChainedStyle/resolveStyleAttr in
+                                    // lib-server/nodes/style.ts.
+                                    const targetEdge = edges.find((e) => e.source === selectedNode.id);
+                                    const targetNode = targetEdge ? nodes.find((n) => n.id === targetEdge.target) : null;
+
+                                    return !targetNode ? (
+                                        <p className="text-sm text-neutral-500">
+                                            Not connected yet. Drag from this node's output dot onto a Label, Div, or Image to apply these CSS
+                                            declarations to it via its inline style attribute.
+                                        </p>
+                                    ) : targetNode.type === "label" || targetNode.type === "div" || targetNode.type === "image" ? (
+                                        <p className="text-xs text-neutral-500">
+                                            Chained into a {NODE_DEFS[targetNode.type].label} — applied to its inline{" "}
+                                            <code className="rounded bg-neutral-100 px-1 py-0.5">style</code> attribute.
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm text-neutral-500">
+                                            Style nodes currently apply to a Label, Div, or Image — {NODE_DEFS[targetNode.type].label} isn't one of
+                                            those, so nothing here will apply to it.
+                                        </p>
                                     );
                                 })()}
 
@@ -1302,6 +1345,13 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                                                     content; <span className="font-medium text-neutral-600">Full screen</span> fills the browser window,
                                                     like an app screen.
                                                 </p>
+                                                {selectedNode.type === "div" && (
+                                                    <p className="mt-1 text-xs text-neutral-400">
+                                                        This Div lays its children out as a plain flex box (controlled by a chained Class node's
+                                                        Direction/Align/Justify/Gap) until you drag or resize a block below — the moment you do, this
+                                                        Div switches to the 12-column grid instead, same as a View.
+                                                    </p>
+                                                )}
                                             </div>
 
                                             {children.length === 0 ? (
