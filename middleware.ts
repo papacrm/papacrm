@@ -4,8 +4,8 @@ import { readCookies, REFRESH_COOKIE_NAME } from "./app/lib-server/cookies";
 import { stringifySetCookie } from "cookie";
 import { verifyRefreshToken } from "./app/lib-server/jwt";
 import { connectDB } from "./app/lib-server/mongoose";
-import Workflow from "./app/lib-server/models/Workflow";
-import { findWebhookNode, runWorkflow } from "./app/lib-server/workflowEngine";
+import Module from "./app/lib-server/models/Module";
+import { findWebhookNode, runModule } from "./app/lib-server/moduleEngine";
 import { WEBHOOK_PAGE_COMPONENTS } from "./app/components/webhooks/registry";
 import { withPageExtras } from "./app/components/webhooks/PageExtras";
 import RootLayout from "./app/pages/layout";
@@ -18,9 +18,9 @@ const DEFAULT_LOCALE = "en";
 // keys in app/lib/useI18n.ts (everything except DEFAULT_LOCALE).
 const PREFIXED_LOCALES = ["fr"];
 
-// ─── Workflow webhooks (served at the root, e.g. "/my-endpoint") ────────
+// ─── Module webhooks (served at the root, e.g. "/my-endpoint") ────────
 //
-// Workflows used to be served under a dedicated "/hooks" prefix via
+// Modules used to be served under a dedicated "/hooks" prefix via
 // server/hooks/[...path].ts. They now live at the root of the app instead,
 // so a webhook node configured with path "orders/new" responds at
 // "/orders/new" rather than "/hooks/orders/new".
@@ -32,12 +32,12 @@ const PREFIXED_LOCALES = ["fr"];
 // That's not workable for something as free-form as a user-defined webhook
 // path. Doing the lookup here instead, ahead of routing, avoids that: real
 // pages are excluded up front (see RESERVED_SLUGS below) and everything
-// else only reaches the workflow engine if an active workflow is actually
+// else only reaches the module engine if an active module is actually
 // listening on it — otherwise it falls through to normal routing exactly
 // as before.
 //
 // Top-level path segments that belong to a real page and must never be
-// shadowed by a workflow's webhook path.
+// shadowed by a module's webhook path.
 const RESERVED_SLUGS = new Set(["d", "login", ...PREFIXED_LOCALES]);
 
 function readRequestBody(req: IncomingMessage): Promise<Buffer> {
@@ -55,7 +55,7 @@ function sendJson(res: ServerResponse, data: unknown, status: number) {
     res.end(JSON.stringify(data));
 }
 
-// Looks for an active workflow whose webhook (or Input Form) trigger is
+// Looks for an active module whose webhook (or Input Form) trigger is
 // listening on `pathname`/`method`, and if one exists, runs it and writes
 // the response. Returns true if it handled the request, false if the
 // caller should fall through to normal page routing.
@@ -71,16 +71,16 @@ async function tryHandleWebhook(
     await connectDB();
 
     // Webhook paths aren't uniquely indexed (a user could reuse a slug
-    // across a couple of draft workflows before activating one), so this
-    // scans active workflows and takes the first path+method match — fine
+    // across a couple of draft modules before activating one), so this
+    // scans active modules and takes the first path+method match — fine
     // at this project's scale.
-    const workflows = await Workflow.find({ active: true }).lean();
+    const modules = await Module.find({ active: true }).lean();
 
-    let match: { workflow: (typeof workflows)[number]; nodeId: string } | undefined;
-    for (const workflow of workflows) {
-        const node = findWebhookNode(workflow.nodes as any, path, method);
+    let match: { module: (typeof modules)[number]; nodeId: string } | undefined;
+    for (const module of modules) {
+        const node = findWebhookNode(module.nodes as any, path, method);
         if (node) {
-            match = { workflow, nodeId: node.id };
+            match = { module, nodeId: node.id };
             break;
         }
     }
@@ -95,7 +95,7 @@ async function tryHandleWebhook(
             if (contentType.includes("application/json")) {
                 body = raw ? JSON.parse(raw) : null;
             } else if (contentType.includes("application/x-www-form-urlencoded")) {
-                // Submissions from an Input Form step arrive this way.
+                // Submissions from an Input Form node arrive this way.
                 body = Object.fromEntries(new URLSearchParams(raw));
             } else {
                 body = raw;
@@ -114,15 +114,15 @@ async function tryHandleWebhook(
     }
     const cookies = readCookies(headers.cookie) as Record<string, string>;
 
-    const result = await runWorkflow(
-        match.workflow.nodes as any,
-        match.workflow.edges as any,
+    const result = await runModule(
+        match.module.nodes as any,
+        match.module.edges as any,
         match.nodeId,
         { method, path, query, body, headers, cookies },
-        String(match.workflow._id),
+        String(match.module._id),
     );
 
-    // Set Header / Set Cookie steps queue onto the result regardless of
+    // Set Header / Set Cookie nodes queue onto the result regardless of
     // which kind of response the run ends with — apply them before
     // writing anything else.
     if (result.headers) {
@@ -149,8 +149,8 @@ async function tryHandleWebhook(
         // gets the app's shared RootLayout (stylesheet, favicon, title
         // template) and whatever reactivity the component itself wires up
         // via useHtml() (see app/components/webhooks/WebhookInputForm.tsx).
-        // withPageExtras applies whatever Html/Load CSS/State steps queued
-        // onto this run (see PageExtras.tsx) regardless of which page step
+        // withPageExtras applies whatever Html/Load CSS/State nodes queued
+        // onto this run (see PageExtras.tsx) regardless of which page node
         // actually produced `result`.
         const Component = withPageExtras(WEBHOOK_PAGE_COMPONENTS[result.page.component], {
             htmlAttrs: result.htmlAttrs,
@@ -230,7 +230,7 @@ if (isDev) {
 //
 // Vercel auto-detects any root-level middleware.ts and ALSO builds/runs it
 // as its own platform-level "Routing Middleware", entirely separately from
-// whatever nuke's own `build:vercel` step does with this same file (see
+// whatever nuke's own `build:vercel` node does with this same file (see
 // nukejs/dist/build-vercel.js, which already bundles this file's default
 // export into pages.func/api.func and calls it correctly as a Node
 // function with a real (req, res) pair on every request — see
@@ -243,7 +243,7 @@ if (isDev) {
 //      for it ("Edge Function 'middleware' is referencing unsupported
 //      modules").
 //   2. Even switched to `runtime: "nodejs"`, it transpiles this file in
-//      isolation rather than bundling it (unlike nuke's own esbuild step),
+//      isolation rather than bundling it (unlike nuke's own esbuild node),
 //      so relative imports like "./app/lib-server/cookies" and
 //      "./app/components/webhooks/registry" are left unresolved for
 //      Node's strict ESM loader (ERR_MODULE_NOT_FOUND).
@@ -286,10 +286,10 @@ export default async function middleware(
         return;
     }
 
-    // A workflow webhook takes priority over everything below — but never
+    // A module webhook takes priority over everything below — but never
     // over a real page, so reserved top-level slugs ("/d", "/login", "/fr")
     // are excluded before we even hit the database. The homepage ("/") is
-    // NOT excluded: an active workflow can claim it (e.g. path set to
+    // NOT excluded: an active module can claim it (e.g. path set to
     // empty/"/"), and if none does, the lookup just returns no match and
     // falls through to the static homepage exactly as before.
     const firstSegment = pathname.split("/").filter(Boolean)[0];

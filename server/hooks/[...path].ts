@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { renderComponent } from "nukejs/server";
 import { parseCookie, stringifySetCookie } from "cookie";
 import { connectDB } from "../../app/lib-server/mongoose";
-import Workflow from "../../app/lib-server/models/Workflow";
-import { findWebhookNode, runWorkflow } from "../../app/lib-server/workflowEngine";
+import Module from "../../app/lib-server/models/Module";
+import { findWebhookNode, runModule } from "../../app/lib-server/moduleEngine";
 import { WEBHOOK_PAGE_COMPONENTS } from "@/app/components/webhooks/registry";
 import { withPageExtras } from "@/app/components/webhooks/PageExtras";
 import RootLayout from "@/app/pages/layout";
@@ -20,8 +20,8 @@ interface ApiResponse extends ServerResponse {
 }
 
 // Any request to /hooks/<anything> lands here — <anything> is whatever
-// path a workflow's webhook node was configured with in the editor (see
-// app/components/workflows/WorkflowEditor.tsx). Nothing here is behind
+// path a module's webhook node was configured with in the editor (see
+// app/components/modules/ModuleEditor.tsx). Nothing here is behind
 // auth: webhooks are meant to be hit by outside services.
 async function handle(req: ApiRequest, res: ApiResponse) {
     const segments = req.params.path;
@@ -31,22 +31,22 @@ async function handle(req: ApiRequest, res: ApiResponse) {
     await connectDB();
 
     // Webhook paths aren't uniquely indexed (a user could reuse a slug
-    // across a couple of draft workflows before activating one), so this
-    // scans active workflows and takes the first path+method match — fine
+    // across a couple of draft modules before activating one), so this
+    // scans active modules and takes the first path+method match — fine
     // at this project's scale.
-    const workflows = await Workflow.find({ active: true }).lean();
+    const modules = await Module.find({ active: true }).lean();
 
-    let match: { workflow: (typeof workflows)[number]; nodeId: string } | undefined;
-    for (const workflow of workflows) {
-        const node = findWebhookNode(workflow.nodes as any, path, method);
+    let match: { module: (typeof modules)[number]; nodeId: string } | undefined;
+    for (const module of modules) {
+        const node = findWebhookNode(module.nodes as any, path, method);
         if (node) {
-            match = { workflow, nodeId: node.id };
+            match = { module, nodeId: node.id };
             break;
         }
     }
 
     if (!match) {
-        res.json({ error: "No active workflow is listening on this webhook" }, 404);
+        res.json({ error: "No active module is listening on this webhook" }, 404);
         return;
     }
 
@@ -57,7 +57,7 @@ async function handle(req: ApiRequest, res: ApiResponse) {
             if (contentType.includes("application/json")) {
                 body = await req.json();
             } else if (contentType.includes("application/x-www-form-urlencoded")) {
-                // Submissions from an Input Form step arrive this way.
+                // Submissions from an Input Form node arrive this way.
                 body = Object.fromEntries(new URLSearchParams(await req.text()));
             } else {
                 body = await req.text();
@@ -76,15 +76,15 @@ async function handle(req: ApiRequest, res: ApiResponse) {
     }
     const cookies = parseCookie(headers.cookie ?? "") as Record<string, string>;
 
-    const result = await runWorkflow(
-        match.workflow.nodes as any,
-        match.workflow.edges as any,
+    const result = await runModule(
+        match.module.nodes as any,
+        match.module.edges as any,
         match.nodeId,
         { method, path, query: req.query, body, headers, cookies },
-        String(match.workflow._id),
+        String(match.module._id),
     );
 
-    // Set Header / Set Cookie steps queue onto the result regardless of
+    // Set Header / Set Cookie nodes queue onto the result regardless of
     // which kind of response the run ends with — apply them before
     // writing anything else.
     if (result.headers) {
@@ -111,8 +111,8 @@ async function handle(req: ApiRequest, res: ApiResponse) {
         // gets the app's shared RootLayout (stylesheet, favicon, title
         // template) and whatever reactivity the component itself wires up
         // via useHtml() (see app/components/webhooks/WebhookInputForm.tsx).
-        // withPageExtras applies whatever Html/Load CSS/State steps queued
-        // onto this run (see PageExtras.tsx) regardless of which page step
+        // withPageExtras applies whatever Html/Load CSS/State nodes queued
+        // onto this run (see PageExtras.tsx) regardless of which page node
         // actually produced `result`.
         const Component = withPageExtras(WEBHOOK_PAGE_COMPONENTS[result.page.component], {
             htmlAttrs: result.htmlAttrs,

@@ -7,12 +7,12 @@ interface PageExtrasProps {
     scripts?: string[];
 }
 
-// Cross-cutting page effects queued by steps that aren't themselves a page
-// (Html, Load CSS, State — see lib/steps/html.ts, css.ts, state.ts) end up
-// on the *run's* result, not on whichever specific page step (Static Page,
+// Cross-cutting page effects queued by nodes that aren't themselves a page
+// (Html, Load CSS, State — see lib/nodes/html.ts, css.ts, state.ts) end up
+// on the *run's* result, not on whichever specific page node (Static Page,
 // View, Table, ...) happens to render the response — same reasoning as
-// Set Header/Set Cookie in lib/steps/setHeader.ts and lib/steps/types.ts's
-// WorkflowResultExtras. Rendering the actual `<html lang>`/`class`, the
+// Set Header/Set Cookie in lib/nodes/setHeader.ts and lib/nodes/types.ts's
+// ModuleResultExtras. Rendering the actual `<html lang>`/`class`, the
 // loaded CSS, and any queued scripts therefore can't live inside any one
 // page component either.
 //

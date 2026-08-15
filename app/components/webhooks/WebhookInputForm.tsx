@@ -1,19 +1,19 @@
 import { useHtml } from "nukejs";
-import type { InputFormField } from "../../lib-server/steps/inputForm";
+import type { InputFormField } from "../../lib-server/nodes/inputForm";
 
 interface WebhookInputFormProps {
   fields: InputFormField[];
   submitLabel: string;
   // This node's own id, submitted back in a hidden field (see the
   // render below) so the engine can tell this specific form's
-  // submission apart from any other Input Form's — every step in a
+  // submission apart from any other Input Form's — every node in a
   // Webhook → Input Form → Input Form chain shares one URL. See
-  // runWorkflow in ../../lib-server/workflowEngine.ts.
-  stepId: string;
+  // runModule in ../../lib-server/moduleEngine.ts.
+  nodeId: string;
 }
 
 // NOTE on why this isn't a `"use client"` component, and how the
-// no-full-reload transition to the next step's page works:
+// no-full-reload transition to the next node's page works:
 //
 // `"use client"` hydration — and with it, `useRouter()`'s SPA navigation —
 // is wired up by NukeJS's *page* pipeline: it reads source files off disk
@@ -28,18 +28,18 @@ interface WebhookInputFormProps {
 //
 // The docs' own guidance for this case is to mount interactive islands "as
 // normal client-side widgets" instead of relying on SSR hydration markers.
-// So the form → next-step transition is done the same way NukeJS's own SPA
+// So the form → next-node transition is done the same way NukeJS's own SPA
 // navigation is: intercept the browser's default (full-reload) navigation,
 // fetch the new page, and swap the relevant DOM in place. Concretely: the
-// submit is intercepted, the workflow's next step is fetched over the wire
+// submit is intercepted, the module's next node is fetched over the wire
 // instead of letting the browser navigate, and the response — itself a
-// full `renderComponent()`-rendered page, e.g. a Static Page step's
+// full `renderComponent()`-rendered page, e.g. a Static Page node's
 // StaticPage.tsx — has its `[data-webhook-page]` content swapped into the
 // current document (see `swapInPage` below). If JS is
 // unavailable, or the fetch fails, the form still works: it's a real
 // `<form method="POST">` and falls back to a normal (full-reload)
 // submission.
-export default function WebhookInputForm({ fields, submitLabel, stepId }: WebhookInputFormProps) {
+export default function WebhookInputForm({ fields, submitLabel, nodeId }: WebhookInputFormProps) {
   useHtml({
     script: [
       {
@@ -78,7 +78,7 @@ export default function WebhookInputForm({ fields, submitLabel, stepId }: Webhoo
     input.addEventListener("blur", function () { validateField(input); });
   });
 
-  // Swaps in the next step's page — parsed from a full renderComponent()
+  // Swaps in the next node's page — parsed from a full renderComponent()
   // HTML response — without a full browser navigation. Mirrors what
   // NukeJS's own client-side router does for <Link>/useRouter navigations
   // (title + content + URL swap, no reload), just done by hand since that
@@ -92,14 +92,14 @@ export default function WebhookInputForm({ fields, submitLabel, stepId }: Webhoo
     document.title = nextDoc.title;
     currentRoot.replaceWith(nextRoot);
 
-    // No step (Input Form or Static Page) has an address of its own
+    // No node (Input Form or Static Page) has an address of its own
     // anymore — every one of them is only ever reached by following an
     // edge from a Webhook — so the URL in the address bar is left as-is;
     // it's still the Webhook's URL, and that's exactly where this form's
     // own submission (see the plain form element below, no explicit
     // action) will go too.
 
-    // If the next step is itself reactive (e.g. another Input Form step),
+    // If the next node is itself reactive (e.g. another Input Form node),
     // its <script> — injected via that page's own useHtml({ script }) call
     // — needs to be re-executed: scripts inserted via replaceWith()/
     // innerHTML never auto-run, so each is cloned into a fresh <script>
@@ -157,7 +157,7 @@ export default function WebhookInputForm({ fields, submitLabel, stepId }: Webhoo
         if (!swapInPage(html)) throw new Error("Unrecognized response");
       })
       .catch(function () {
-        // Fall back to a real navigation so the workflow still completes
+        // Fall back to a real navigation so the module still completes
         // even if the in-place swap couldn't be done (e.g. very old
         // browser, or the response wasn't a page NukeJS rendered).
         HTMLFormElement.prototype.submit.call(form);
@@ -171,7 +171,7 @@ export default function WebhookInputForm({ fields, submitLabel, stepId }: Webhoo
 
   return (
     <form method="POST" data-webhook-form className="flex flex-col gap-4" noValidate>
-      <input type="hidden" name="__step" value={stepId} />
+      <input type="hidden" name="__node" value={nodeId} />
       <div data-form-error className="text-sm text-red-600" role="alert" />
       {fields.map((field) => (
         <div key={field.name} className="flex flex-col gap-1.5">

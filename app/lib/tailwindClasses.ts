@@ -7,8 +7,8 @@
 // never generates `.text-lg { ... }` and the class does nothing at
 // runtime, no matter how correct the HTML is.
 //
-// The Class step (see app/lib/step-defs/class.ts and
-// app/lib-server/steps/class.ts) needs exactly that: a user picks "lg"
+// The Class node (see app/lib/node-defs/class.ts and
+// app/lib-server/nodes/class.ts) needs exactly that: a user picks "lg"
 // from a dropdown, stored as plain data in Mongo, resolved into a class
 // string when a page renders. The fix is to never let a class name be
 // anything other than a literal string constant. Every table below maps
@@ -339,7 +339,7 @@ export const WIDTH_OPTIONS: ClassOption[] = [
 export const BORDER_CLASS = "border border-neutral-200";
 
 // ─── The data shape stored on a Class node ──────────────────────────────
-export interface ClassStepData {
+export interface ClassNodeData {
     // Label-oriented
     size?: string;
     weight?: string;
@@ -369,9 +369,9 @@ export interface ClassStepData {
 
 // Pure, deterministic, and only ever looks values up in the tables above
 // — used identically by the editor (live preview + node summary) and by
-// the server renderer (lib-server/steps/class.ts), so what you see while
+// the server renderer (lib-server/nodes/class.ts), so what you see while
 // editing is exactly what ships.
-export function buildClassName(data: ClassStepData | null | undefined): string {
+export function buildClassName(data: ClassNodeData | null | undefined): string {
     if (!data) return "";
     const classes: string[] = [];
 

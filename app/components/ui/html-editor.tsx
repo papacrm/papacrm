@@ -25,7 +25,7 @@ export interface HtmlEditorProps extends Omit<React.TextareaHTMLAttributes<HTMLT
 }
 
 // A lightweight, shadcn-styled HTML editor for HTML fields (e.g. the Page
-// step's body). Two views, toggled top-right:
+// node's body). Two views, toggled top-right:
 //   - "Edit" (default): a contentEditable WYSIWYG surface — the toolbar
 //     buttons format the text in place via document.execCommand, the way a
 //     real editor's buttons do, instead of typing tags by hand.

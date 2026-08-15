@@ -1,11 +1,11 @@
 import { useHtml } from "nukejs";
-import type { InputFormField } from "../../lib-server/steps/inputForm";
+import type { InputFormField } from "../../lib-server/nodes/inputForm";
 import ListTable from "./ListTable";
 import WebhookInputForm from "./WebhookInputForm";
 
 type ContainerBlock =
     | { type: "table"; heading?: string; fields: { key: string; label: string; type?: string }[]; documents: { _id: string; data: Record<string, any> }[] }
-    | { type: "form"; heading?: string; title?: string; submitLabel: string; fields: InputFormField[]; stepId: string }
+    | { type: "form"; heading?: string; title?: string; submitLabel: string; fields: InputFormField[]; nodeId: string }
     | { type: "html"; heading?: string; html: string };
 
 interface ContainerProps {
@@ -13,11 +13,11 @@ interface ContainerProps {
     blocks: ContainerBlock[];
 }
 
-// Renders a Container step's blocks in order. Each block is its own
+// Renders a Container node's blocks in order. Each block is its own
 // section; a "form" block is WebhookInputForm itself (same component Input
 // Form uses) so it gets the same live validation and no-full-reload submit
 // behavior — see that component for how the submission finds its way back
-// to lib/steps/container.ts via the block's stepId.
+// to lib/nodes/container.ts via the block's nodeId.
 //
 // Only the *first* form block on the page is interactive: WebhookInputForm
 // wires itself up by looking for `[data-webhook-form]`, so with more than
@@ -37,7 +37,7 @@ export default function Container({ title, blocks }: ContainerProps) {
                     {block.type === "form" && (
                         <>
                             {block.title && <p className="text-sm text-neutral-600">{block.title}</p>}
-                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} stepId={block.stepId} />
+                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} nodeId={block.nodeId} />
                         </>
                     )}
                     {block.type === "html" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}

@@ -34,11 +34,11 @@ export default function DashboardHome() {
             )}
 
             <Link
-                href="/d/workflows"
+                href="/d/modules"
                 className="mt-6 flex max-w-sm items-center justify-between rounded-lg border border-neutral-200 px-4 py-3 text-sm hover:border-neutral-300 hover:bg-neutral-50"
             >
                 <span>
-                    <span className="block font-medium text-neutral-900">Workflows</span>
+                    <span className="block font-medium text-neutral-900">Modules</span>
                     <span className="block text-neutral-500">Build automations with webhooks, HTTP requests, conditions, and pages</span>
                 </span>
                 <span aria-hidden>→</span>

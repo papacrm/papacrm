@@ -16,9 +16,9 @@ interface ListItemsProps {
 }
 
 // Renders a List View's rows as a plain <ul>/<li> list — the ul/li
-// counterpart to ListTable.tsx's <table>. Shared by the List View step
-// (its own page) and the View step's "listView" blocks (see
-// lib/steps/listView.ts / lib/steps/view.ts, which both hand this the
+// counterpart to ListTable.tsx's <table>. Shared by the List View node
+// (its own page) and the View node's "listView" blocks (see
+// lib/nodes/listView.ts / lib/nodes/view.ts, which both hand this the
 // same { items } shape from resolveListItems()). When a Card is chained
 // into the List View, `item.card` is set and takes over the <li>'s
 // content. When a View is chained, `item.view` is set and its blocks are

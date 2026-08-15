@@ -18,8 +18,8 @@ interface CardGridProps {
 }
 
 // Renders resolved rows as a grid of cards — the card counterpart to
-// ListTable.tsx's <table>. Shared by the Card step (its own page) and the
-// View step's "card" blocks (see lib/steps/card.ts / lib/steps/view.ts,
+// ListTable.tsx's <table>. Shared by the Card node (its own page) and the
+// View node's "card" blocks (see lib/nodes/card.ts / lib/nodes/view.ts,
 // which both hand this the same { fields, items } shape from
 // resolveCardItems()). Falls back to a plain field dump per card when
 // none of title/subtitle/body were configured, same spirit as Table

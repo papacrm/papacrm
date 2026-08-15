@@ -5,8 +5,8 @@ interface StaticPageProps {
     html: string;
 }
 
-// Renders a workflow's Static Page step. This used to be a hand-built
-// `<!doctype html>...` string assembled by lib/steps/staticPage.ts and
+// Renders a module's Static Page node. This used to be a hand-built
+// `<!doctype html>...` string assembled by lib/nodes/staticPage.ts and
 // dumped straight onto the response (see server/hooks/[...path].ts's git
 // history). Going through a real component here — rendered via NukeJS's
 // `renderComponent()` — means the page gets a proper <head> (title, the
@@ -14,7 +14,7 @@ interface StaticPageProps {
 // unstyled document.
 //
 // `html` is still injected raw: it's whatever HTML the person building the
-// workflow typed into the editor's "HTML" field, not user input from a
+// module typed into the editor's "HTML" field, not user input from a
 // site visitor, so it's meant to be trusted markup rather than escaped
 // text.
 export default function StaticPage({ title, html }: StaticPageProps) {

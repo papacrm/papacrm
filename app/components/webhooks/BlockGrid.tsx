@@ -8,7 +8,7 @@ import ListTable from "./ListTable";
 import ListItems from "./ListItems";
 import CardGrid from "./CardGrid";
 import WebhookInputForm from "./WebhookInputForm";
-import type { InputFormField } from "../../lib-server/steps/inputForm";
+import type { InputFormField } from "../../lib-server/nodes/inputForm";
 
 interface ViewBlockPosition {
     col: number;
@@ -37,7 +37,7 @@ type ViewBlock =
           fields: { key: string; label: string }[];
           items: { _id: string; title: string; subtitle: string; body: string; data: Record<string, any> }[];
       }
-    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; stepId: string }
+    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; nodeId: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string; className?: string }
@@ -81,7 +81,7 @@ export default function BlockGrid({ blocks }: { blocks: ViewBlock[] }) {
                     {block.type === "form" && (
                         <>
                             {block.title && <p className="mb-3 text-sm text-neutral-600">{block.title}</p>}
-                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} stepId={block.stepId} />
+                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} nodeId={block.nodeId} />
                         </>
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}

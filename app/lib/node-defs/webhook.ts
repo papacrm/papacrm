@@ -1,0 +1,26 @@
+import { randomSlug, publicHookNote, type ModuleNodeDef } from "./types";
+
+const webhookNode: ModuleNodeDef = {
+    type: "webhook",
+    label: "Webhook",
+    description: "Starts the module when a URL is requested",
+    color: "#2563eb",
+    kind: "trigger",
+    fields: [
+        { key: "path", label: "Path", kind: "text", placeholder: "my-endpoint" },
+        {
+            key: "method",
+            label: "Method",
+            kind: "select",
+            options: [
+                { value: "GET", label: "GET" },
+                { value: "POST", label: "POST" },
+            ],
+        },
+    ],
+    defaultData: () => ({ path: randomSlug(), method: "GET" }),
+    summarize: (data) => `${data?.method ?? "GET"} /${data?.path || "…"}`,
+    inspectorNote: publicHookNote,
+};
+
+export default webhookNode;

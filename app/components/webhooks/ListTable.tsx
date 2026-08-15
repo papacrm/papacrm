@@ -15,9 +15,9 @@ interface ListTableProps {
     documents: ListTableDocument[];
 }
 
-// Renders a List's records as a plain HTML table. Shared by the Table step
-// (StaticPage-style, one table per page) and the Container step's "table"
-// blocks (see lib/steps/table.ts / container.ts, which both hand this the
+// Renders a List's records as a plain HTML table. Shared by the Table node
+// (StaticPage-style, one table per page) and the Container node's "table"
+// blocks (see lib/nodes/table.ts / container.ts, which both hand this the
 // same { fields, documents } shape from loadListTableData()).
 export default function ListTable({ fields, documents }: ListTableProps) {
     if (documents.length === 0) {

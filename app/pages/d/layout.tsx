@@ -21,8 +21,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <Link href="/d" className="hover:text-neutral-900">
                             Overview
                         </Link>
-                        <Link href="/d/workflows" className="hover:text-neutral-900">
-                            Workflows
+                        <Link href="/d/modules" className="hover:text-neutral-900">
+                            Modules
                         </Link>
                         <Link href="/d/lists" className="hover:text-neutral-900">
                             Lists
@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 ignores its parent's height without it. overflow-y-auto
                 keeps normal pages scrolling in here, not at the document
                 level; a page that wants to fill this exactly (e.g. the
-                workflow editor) can use h-full and manage its own
+                module editor) can use h-full and manage its own
                 scrolling internally instead of relying on this one. */}
             <main className="min-h-0 flex-1 overflow-y-auto px-6 py-10">{children}</main>
         </div>

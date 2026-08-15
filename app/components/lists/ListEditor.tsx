@@ -73,7 +73,7 @@ export default function ListEditor({ list }: { list: ListSummary }) {
                 orpc.list.document.list({ listId: list._id, page, pageSize: PAGE_SIZE, sortKey, sortDir, filterKey, filterValue }),
             );
             // Tolerates the old handler's bare-array response too, in case
-            // the frontend and backend ever end up deployed a step apart.
+            // the frontend and backend ever end up deployed a node apart.
             if (Array.isArray(data)) {
                 setDocuments(data as ListDocumentRecord[]);
                 setTotal((data as ListDocumentRecord[]).length);
