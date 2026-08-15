@@ -19,6 +19,10 @@ const webhookNode: NodeExecutor = {
     // longer gates routing. `[param]` segments are matched, not compared
     // literally — see matchPath.
     matchesTrigger(node, path) {
+        // Nodes saved before the per-node Active toggle existed have no
+        // `active` key at all — treat that as on, same as the editor's
+        // default. Only an explicit `false` turns this node off.
+        if (node.data?.active === false) return false;
         return matchPath(String(node.data?.path ?? ""), path) !== null;
     },
 };

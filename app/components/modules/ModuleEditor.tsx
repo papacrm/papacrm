@@ -9,6 +9,7 @@ import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Textarea } from "@/app/components/ui/textarea";
 import { HtmlEditor } from "@/app/components/ui/html-editor";
+import { Switch } from "@/app/components/ui/switch";
 import { NODE_DEFS, NODE_ORDER, CATEGORY_ORDER, CATEGORY_META, NODE_CATEGORIES, type ModuleNode, type ModuleEdge, type ModuleNodeType, type ModuleNodeCategory } from "@/app/lib/moduleTypes";
 import { cn } from "@/app/lib/utils";
 import {
@@ -522,19 +523,17 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                     }}
                     className="h-8 max-w-xs font-medium"
                 />
-                <button
-                    type="button"
-                    onClick={() => {
-                        setActive((a) => !a);
-                        setDirty(true);
-                    }}
-                    className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
-                        active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-neutral-200 bg-neutral-50 text-neutral-500"
-                    }`}
-                >
-                    <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-500" : "bg-neutral-400"}`} />
-                    {active ? "Active" : "Inactive"}
-                </button>
+                <div className="inline-flex h-8 items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 text-xs font-medium">
+                    <Switch
+                        checked={active}
+                        onCheckedChange={(checked) => {
+                            setActive(checked);
+                            setDirty(true);
+                        }}
+                        aria-label={active ? "Module is active" : "Module is inactive"}
+                    />
+                    <span className={active ? "text-emerald-700" : "text-neutral-500"}>{active ? "Active" : "Inactive"}</span>
+                </div>
 
                 <div className="ml-auto flex items-center gap-3">
                     {error && <span className="text-sm text-destructive">{error}</span>}
@@ -854,6 +853,26 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                                             </div>
                                         );
                                     }
+                                }
+
+                                if (field.kind === "toggle") {
+                                    const checked = selectedNode.data?.[field.key] !== false;
+                                    return (
+                                        <div key={field.key} className="flex items-center justify-between gap-2">
+                                            <Label htmlFor={field.key}>{field.label}</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Switch
+                                                    id={field.key}
+                                                    checked={checked}
+                                                    onCheckedChange={(next) => updateNodeData(selectedNode.id, field.key, next)}
+                                                    aria-label={`${field.label}: ${checked ? "on" : "off"}`}
+                                                />
+                                                <span className={cn("text-xs font-medium", checked ? "text-emerald-700" : "text-neutral-500")}>
+                                                    {checked ? "Active" : "Inactive"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
                                 }
 
                                 return (

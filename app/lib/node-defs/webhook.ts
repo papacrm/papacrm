@@ -17,9 +17,15 @@ const webhookNode: ModuleNodeDef = {
                 { value: "POST", label: "POST" },
             ],
         },
+        // Lets a single Webhook node be switched on/off without deleting
+        // it or deactivating the whole module — see `active` gating in
+        // app/lib-server/nodes/webhook.ts's matchesTrigger. Old nodes
+        // saved before this field existed have no `active` key at all,
+        // so it's treated as on by default (see the `!== false` checks).
+        { key: "active", label: "Active", kind: "toggle" },
     ],
-    defaultData: () => ({ path: randomSlug(), method: "GET" }),
-    summarize: (data) => `${data?.method ?? "GET"} /${data?.path || "…"}`,
+    defaultData: () => ({ path: randomSlug(), method: "GET", active: true }),
+    summarize: (data) => `${data?.method ?? "GET"} /${data?.path || "…"}${data?.active === false ? " (inactive)" : ""}`,
     inspectorNote: publicHookNote,
 };
 

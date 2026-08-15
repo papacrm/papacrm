@@ -84,7 +84,7 @@ export interface ModuleEdge {
 export interface ModuleField {
     key: string;
     label: string;
-    kind: "text" | "textarea" | "select" | "html";
+    kind: "text" | "textarea" | "select" | "html" | "toggle";
     placeholder?: string;
     options?: { value: string; label: string }[];
     // For "select" fields whose options can't be known statically (e.g.
@@ -135,9 +135,14 @@ export function randomSlug(): string {
 // mounted, plus a nudge to activate the module.
 export function publicHookNote(data: Record<string, any>, ctx: InspectorNoteContext): InspectorNote | null {
     if (!ctx.origin) return null;
+    const warning = !ctx.active
+        ? "Save and mark this module Active for the URL to respond."
+        : data?.active === false
+          ? "This node is Inactive — save to stop the URL from responding."
+          : undefined;
     return {
         label: "Public URL",
         value: `${ctx.origin}/${data?.path || ""}`,
-        warning: ctx.active ? undefined : "Save and mark this module Active for the URL to respond.",
+        warning,
     };
 }
