@@ -37,8 +37,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 keeps normal pages scrolling in here, not at the document
                 level; a page that wants to fill this exactly (e.g. the
                 module editor) can use h-full and manage its own
-                scrolling internally instead of relying on this one. */}
-            <main className="min-h-0 flex-1 overflow-y-auto px-6 py-10">{children}</main>
+                scrolling internally instead of relying on this one.
+                No padding here on purpose — a full-bleed page like the
+                module editor doesn't want any; regular content pages
+                (Dashboard, Modules list, Lists list) apply their own
+                px-6 py-10 on their own root element instead. */}
+            <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
         </div>
     );
 }

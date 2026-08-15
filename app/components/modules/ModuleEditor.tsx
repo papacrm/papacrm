@@ -33,8 +33,18 @@ import {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 78;
-const CANVAS_WIDTH = 1600;
-const CANVAS_HEIGHT = 900;
+// Starting size of the canvas workspace — big enough that most modules
+// never need to grow it, so there's only a little scroll to begin with.
+const INITIAL_CANVAS_WIDTH = 2400;
+const INITIAL_CANVAS_HEIGHT = 1400;
+// Scrolling within this many px of the current right/bottom edge grows
+// the workspace by CANVAS_GROW_STEP in that direction — this is what
+// makes the canvas feel infinite instead of hard-capped at a fixed size.
+const CANVAS_GROW_THRESHOLD = 400;
+const CANVAS_GROW_STEP = 1200;
+// Sane ceiling so the canvas can't be scrolled into unbounded, slow-to-
+// render territory — effectively infinite for any real module.
+const CANVAS_MAX_SIZE = 20000;
 
 // Node types that can be dropped into a View's page — see the "Layout"
 // section rendered below for a selected View node, and its server-side
@@ -123,6 +133,13 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     const [active, setActive] = useState(module.active);
     const [nodes, setNodes] = useState<ModuleNode[]>(module.nodes);
     const [edges, setEdges] = useState<ModuleEdge[]>(module.edges);
+    // Grows on scroll (see handleCanvasScroll below) instead of staying
+    // fixed — canvasSizeRef mirrors it for the mousemove/mouseup
+    // listeners below, which are attached once and would otherwise read
+    // a stale size from their first render.
+    const [canvasSize, setCanvasSize] = useState({ width: INITIAL_CANVAS_WIDTH, height: INITIAL_CANVAS_HEIGHT });
+    const canvasSizeRef = useRef(canvasSize);
+    canvasSizeRef.current = canvasSize;
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [connectingLine, setConnectingLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
     const [dirty, setDirty] = useState(false);
@@ -216,7 +233,11 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                 setNodes((prev) =>
                     prev.map((n) =>
                         n.id === id
-                            ? { ...n, x: Math.max(0, Math.min(CANVAS_WIDTH - NODE_WIDTH, x - offsetX)), y: Math.max(0, Math.min(CANVAS_HEIGHT - NODE_HEIGHT, y - offsetY)) }
+                            ? {
+                                  ...n,
+                                  x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, x - offsetX)),
+                                  y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, y - offsetY)),
+                              }
                             : n,
                     ),
                 );
@@ -443,6 +464,23 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
         setDirty(true);
     }
 
+    // Makes the canvas feel infinite: scrolling near the current
+    // right/bottom edge grows the workspace further in that direction
+    // instead of just hitting a hard stop. Capped at CANVAS_MAX_SIZE so
+    // it can't runaway-grow into something slow to render.
+    function handleCanvasScroll(e: React.UIEvent<HTMLDivElement>) {
+        const el = e.currentTarget;
+        const nearRight = el.scrollLeft + el.clientWidth >= el.scrollWidth - CANVAS_GROW_THRESHOLD;
+        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - CANVAS_GROW_THRESHOLD;
+        if (!nearRight && !nearBottom) return;
+        setCanvasSize((prev) => {
+            const width = nearRight ? Math.min(CANVAS_MAX_SIZE, prev.width + CANVAS_GROW_STEP) : prev.width;
+            const height = nearBottom ? Math.min(CANVAS_MAX_SIZE, prev.height + CANVAS_GROW_STEP) : prev.height;
+            if (width === prev.width && height === prev.height) return prev;
+            return { width, height };
+        });
+    }
+
     async function handleSave() {
         setSaving(true);
         setError(null);
@@ -468,6 +506,25 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
             setError(err instanceof ORPCError ? err.message : "Couldn't delete the module.");
             setDeleting(false);
         }
+    }
+
+    // Downloads the module's current editor state (not necessarily
+    // saved yet) as a standalone JSON file. Deliberately omits `_id` —
+    // the matching Import (coming next) creates a brand-new module from
+    // this file rather than overwriting one, so a stale id would be
+    // misleading here.
+    function handleExport() {
+        const exportData = { name, active, nodes, edges };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const slug = (name.trim() || "module").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "module";
+        a.href = url;
+        a.download = `${slug}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
     }
 
     const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
@@ -523,7 +580,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                     }}
                     className="h-8 max-w-xs font-medium"
                 />
-                <div className="inline-flex h-8 items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 text-xs font-medium">
+                <div className="inline-flex items-center gap-2 px-1 text-xs font-medium">
                     <Switch
                         checked={active}
                         onCheckedChange={(checked) => {
@@ -539,6 +596,9 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                     {error && <span className="text-sm text-destructive">{error}</span>}
                     {!error && saved && !dirty && <span className="text-sm text-neutral-400">Saved</span>}
                     {dirty && !saving && <span className="text-sm text-neutral-400">Unsaved changes</span>}
+                    <Button type="button" variant="outline" size="sm" onClick={handleExport}>
+                        Export
+                    </Button>
                     <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={deleting}>
                         {deleting ? "Deleting…" : "Delete"}
                     </Button>
@@ -619,14 +679,19 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                 <div
                     ref={canvasRef}
                     onMouseDown={() => setSelectedNodeId(null)}
-                    className="relative flex-1 overflow-auto bg-neutral-50"
+                    onScroll={handleCanvasScroll}
+                    // min-w-0/min-h-0 matter here: without them, a flex
+                    // item won't shrink below its content's natural size,
+                    // which was silently defeating overflow-auto and
+                    // making this pane grow instead of scroll.
+                    className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-neutral-50"
                     style={{
                         backgroundImage: "radial-gradient(circle, #d4d4d8 1px, transparent 1px)",
                         backgroundSize: "20px 20px",
                     }}
                 >
-                    <div style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT, position: "relative" }}>
-                        <svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="pointer-events-none absolute left-0 top-0">
+                    <div style={{ width: canvasSize.width, height: canvasSize.height, position: "relative" }}>
+                        <svg width={canvasSize.width} height={canvasSize.height} className="pointer-events-none absolute left-0 top-0">
                             {edges.map((edge) => {
                                 const source = nodes.find((n) => n.id === edge.source);
                                 const target = nodes.find((n) => n.id === edge.target);

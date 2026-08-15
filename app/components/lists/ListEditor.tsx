@@ -209,7 +209,7 @@ export default function ListEditor({ list }: { list: ListSummary }) {
     }
 
     return (
-        <div className="mx-auto flex max-w-4xl flex-col gap-8">
+        <div className="mx-auto flex max-w-4xl flex-col gap-8 px-6 py-10">
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <Link href="/d/lists" className="text-xs font-medium text-neutral-500 underline underline-offset-4 hover:text-neutral-900">
