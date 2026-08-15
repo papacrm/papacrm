@@ -57,6 +57,7 @@ export type ModuleNodeType =
     | "distinct"
     | "delay"
     | "random"
+    | "env"
     | "text"
     | "image"
     | "selectInput";
@@ -149,6 +150,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "distinct",
                 "delay",
                 "random",
+                "env",
                 "text",
                 "image",
                 "selectInput",

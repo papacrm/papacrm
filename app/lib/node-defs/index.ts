@@ -52,6 +52,7 @@ import countNode from "./count";
 import distinctNode from "./distinct";
 import delayNode from "./delay";
 import randomNode from "./random";
+import envNode from "./env";
 import textNode from "./text";
 import imageNode from "./image";
 import selectInputNode from "./selectInput";
@@ -119,6 +120,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     distinct: distinctNode,
     delay: delayNode,
     random: randomNode,
+    env: envNode,
     text: textNode,
     image: imageNode,
     selectInput: selectInputNode,
@@ -171,6 +173,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "jwtVerify",
     "jwtSign",
     "random",
+    "env",
     "find",
     "match",
     "project",
@@ -234,6 +237,7 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     jwtVerify: "requests",
     jwtSign: "requests",
     random: "requests",
+    env: "requests",
 
     staticPage: "responses",
     json: "responses",

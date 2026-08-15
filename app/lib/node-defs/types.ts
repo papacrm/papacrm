@@ -57,6 +57,7 @@ export type ModuleNodeType =
     | "distinct"
     | "delay"
     | "random"
+    | "env"
     | "text"
     | "image"
     | "selectInput";
