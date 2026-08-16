@@ -6,6 +6,7 @@ import conditionNode from "./condition";
 import staticPageNode from "./staticPage";
 import saveRecordNode from "./saveRecord";
 import saveToListNode from "./saveToList";
+import updateOneNode from "./updateOne";
 import mapperNode from "./mapper";
 import functionNode from "./function";
 import callNode from "./call";
@@ -76,6 +77,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     staticPage: staticPageNode,
     saveRecord: saveRecordNode,
     saveToList: saveToListNode,
+    updateOne: updateOneNode,
     mapper: mapperNode,
     function: functionNode,
     call: callNode,
@@ -171,6 +173,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "container",
     "saveRecord",
     "saveToList",
+    "updateOne",
     "getHeader",
     "setHeader",
     "getCookie",
@@ -228,6 +231,7 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     count: "data",
     saveRecord: "data",
     saveToList: "data",
+    updateOne: "data",
 
     condition: "logic",
     mapper: "logic",

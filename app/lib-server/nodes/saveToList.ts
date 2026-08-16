@@ -3,6 +3,14 @@ import { sanitizeDocumentData } from "../listValidation";
 import { nextEdgeTargets, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
 
+// Shared by every "nothing was actually saved" branch below (no chained
+// list, an unresolvable one, or a write error) — same underscore-prefixed
+// "_saved" flag a downstream node checks, mirroring how Find One's output
+// carries "_found".
+function emptyResult() {
+    return { _saved: false };
+}
+
 const saveToListNode: NodeExecutor = {
     async run({ node, ctx, edges, nodes }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
@@ -23,17 +31,44 @@ const saveToListNode: NodeExecutor = {
         const data = ctx.body ?? {};
         const targetNode = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).find((n) => n && (n.type === "list" || n.type === "listUpsert"));
 
-        // A side effect, not a response — same "skip quietly rather than
-        // fail the whole run" spirit as Save to Database: no chained
-        // list, a not-yet-configured List node, an empty List (create if
-        // not exists) name, or a resolution error all just mean there's
-        // nowhere to save, not that the run should error out.
-        if (targetNode) {
-            const resolved = await resolveListTarget(targetNode, ctx).catch(() => null);
-            if (resolved) {
-                const sanitized = sanitizeDocumentData(resolved.fields, data);
-                await ListDocument.create({ list: resolved.listId, owner: resolved.owner, data: sanitized });
-            }
+        // A side effect that also produces its own output — same
+        // "skip quietly rather than fail the whole run" spirit as Save to
+        // Database: no chained list, a not-yet-configured List node, an
+        // empty List (create if not exists) name, or a resolution error
+        // all just mean there's nowhere to save, reflected in the output
+        // as `_saved: false` instead of failing the run.
+        if (!targetNode) {
+            ctx.body = emptyResult();
+            return { done: false, nextNodeIds };
+        }
+
+        const resolved = await resolveListTarget(targetNode, ctx).catch(() => null);
+        if (!resolved) {
+            ctx.body = emptyResult();
+            return { done: false, nextNodeIds };
+        }
+
+        try {
+            const sanitized = sanitizeDocumentData(resolved.fields, data);
+            const created = await ListDocument.create({ list: resolved.listId, owner: resolved.owner, data: sanitized });
+
+            // The inserted document, spread the same way Find One hands
+            // its match's fields to the next node — so a node right after
+            // Save to List can read {{fieldName}} the same way it would
+            // any other current data, plus the new document's own id and
+            // timestamps for anything that needs to reference the record
+            // it just created (e.g. a link back to it, or a follow-up
+            // Update One matched on `_id`).
+            ctx.body = {
+                ...sanitized,
+                _id: String(created._id),
+                _listId: resolved.listId,
+                _saved: true,
+                createdAt: created.createdAt,
+                updatedAt: created.updatedAt,
+            };
+        } catch {
+            ctx.body = emptyResult();
         }
 
         return { done: false, nextNodeIds };

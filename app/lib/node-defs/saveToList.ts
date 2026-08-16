@@ -10,7 +10,8 @@ import type { ModuleNodeDef } from "./types";
 const saveToListNode: ModuleNodeDef = {
     type: "saveToList",
     label: "Save to List",
-    description: "Stores the current data as a new entry in whichever list the next node (a List or List (create if not exists) node) resolves to",
+    description:
+        "Stores the current data as a new entry in whichever list the next node (a List or List (create if not exists) node) resolves to, and passes the saved document (with its _id) on as the output",
     color: "#0d9488",
     kind: "action",
     fields: [],

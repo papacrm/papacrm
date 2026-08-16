@@ -7,6 +7,7 @@ import conditionNode from "./condition";
 import staticPageNode from "./staticPage";
 import saveRecordNode from "./saveRecord";
 import saveToListNode from "./saveToList";
+import updateOneNode from "./updateOne";
 import mapperNode from "./mapper";
 import functionNode from "./function";
 import callNode from "./call";
@@ -76,6 +77,7 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     staticPage: staticPageNode,
     saveRecord: saveRecordNode,
     saveToList: saveToListNode,
+    updateOne: updateOneNode,
     mapper: mapperNode,
     function: functionNode,
     call: callNode,
