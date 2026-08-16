@@ -24,7 +24,7 @@ const listUpsertNode: ModuleNodeDef = {
             key: "schema",
             label: "Schema (JSON, used only if the list doesn't exist yet)",
             kind: "textarea",
-            placeholder: '[\n  { "key": "email", "label": "Email", "type": "text" }\n]',
+            placeholder: '[\n  { "key": "email", "label": "Email", "type": "text", "unique": true }\n]',
         },
     ],
     defaultData: () => ({ name: "", schema: "[]" }),
@@ -34,7 +34,7 @@ const listUpsertNode: ModuleNodeDef = {
             ? null
             : {
                   label: "Tip",
-                  value: "Give it a name — plain text or a {{field}} template. Each field in the schema needs a key, label, and type (text, number, boolean, date, or select).",
+                  value: "Give it a name — plain text or a {{field}} template. Each field in the schema needs a key, label, and type (text, number, boolean, date, or select); add \"unique\": true to a field to stop two documents from ever sharing a value for it.",
               },
 };
 

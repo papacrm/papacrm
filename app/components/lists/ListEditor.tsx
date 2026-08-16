@@ -293,6 +293,18 @@ export default function ListEditor({ list }: { list: ListSummary }) {
                                     />
                                 </div>
                             )}
+                            <div className="flex flex-col gap-1">
+                                <Label className="text-xs text-neutral-500">&nbsp;</Label>
+                                <label className="flex h-9 items-center gap-2 text-sm text-neutral-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(field.unique)}
+                                        onChange={(e) => updateField(index, { unique: e.target.checked || undefined })}
+                                        className="h-4 w-4 rounded border-input"
+                                    />
+                                    Unique
+                                </label>
+                            </div>
                             <Button
                                 type="button"
                                 variant="ghost"

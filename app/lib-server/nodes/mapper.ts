@@ -1,4 +1,4 @@
-import { nextEdgeTargets, renderTemplate, type NodeContext, type NodeExecutor } from "./types";
+import { flattenJoinBody, isJoinBody, nextEdgeTargets, renderTemplate, uniqueIncomingSources, type NodeContext, type NodeExecutor } from "./types";
 
 // Builds the mapped object from the *current* context (i.e. before it's
 // overwritten) — every string value in the mapping is run through the same
@@ -15,32 +15,6 @@ function applyMapping(mapping: unknown, ctx: NodeContext): Record<string, any> {
     return out;
 }
 
-// When this node has "Multiple inputs" set to "Wait", moduleEngine's join
-// (see settleJoin in ../moduleEngine.ts) hands it a body namespaced by which
-// predecessor it arrived from — `{ [sourceNodeId]: bodyFromThatSource }` —
-// so a downstream node can target one specifically via
-// {{sourceNodeId.field}}. Mapper doesn't use that: it flattens the join
-// back into one plain object so the mapping can just use {{field}}
-// everywhere, same as a single input. If two inputs share a prop name, the
-// one that arrived later simply overwrites the earlier one — Object.values
-// walks the join body in the order its keys were inserted, which is arrival
-// order (settleJoin builds it by iterating its `arrived` Map, itself
-// populated in arrival order) — so this is "last one in wins", not a lookup
-// by source node id.
-function flattenJoinBody(body: Record<string, unknown>): Record<string, any> {
-    const flat: Record<string, any> = {};
-    for (const part of Object.values(body)) {
-        if (part && typeof part === "object" && !Array.isArray(part)) Object.assign(flat, part);
-    }
-    return flat;
-}
-
-function isJoinBody(ctx: NodeContext, incomingSourceIds: string[]): ctx is NodeContext & { body: Record<string, unknown> } {
-    if (incomingSourceIds.length < 2) return false;
-    if (!ctx.body || typeof ctx.body !== "object" || Array.isArray(ctx.body)) return false;
-    return incomingSourceIds.every((id) => id in (ctx.body as Record<string, unknown>));
-}
-
 const mapperNode: NodeExecutor = {
     run({ node, ctx, edges }) {
         let mapping: unknown = {};
@@ -52,9 +26,15 @@ const mapperNode: NodeExecutor = {
             mapping = {};
         }
 
-        const incomingSourceIds = Array.from(new Set(edges.filter((e) => e.target === node.id).map((e) => e.source)));
-        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx, incomingSourceIds);
-        const effectiveCtx: NodeContext = waitJoin ? { ...ctx, body: flattenJoinBody(ctx.body) } : ctx;
+        // When this node has 2+ inputs and "Multiple inputs" is set to
+        // Wait, ctx.body arrives namespaced by source node id (see
+        // isJoinBody/flattenJoinBody in ./types). Mapper flattens that
+        // back into one flat object first, so the mapping can just use
+        // {{field}} everywhere — see flattenJoinBody's own doc comment for
+        // exactly how a shared field name is resolved.
+        const incomingSourceIds = uniqueIncomingSources(edges, node.id);
+        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
+        const effectiveCtx: NodeContext = waitJoin ? { ...ctx, body: flattenJoinBody(ctx.body as Record<string, unknown>) } : ctx;
 
         const mapped = applyMapping(mapping, effectiveCtx);
         const existing = effectiveCtx.body && typeof effectiveCtx.body === "object" ? effectiveCtx.body : {};

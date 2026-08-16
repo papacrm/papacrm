@@ -4,6 +4,7 @@ import { connectDB } from "../lib-server/mongoose";
 import List from "../lib-server/models/List";
 import ListDocument from "../lib-server/models/ListDocument";
 import { sanitizeDocumentData } from "../lib-server/listValidation";
+import { findUniqueFieldConflict } from "../lib-server/listUnique";
 
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 const DEFAULT_PAGE_SIZE = 20;
@@ -112,6 +113,12 @@ export const create = authed.handler(async ({ input, context }) => {
     const listDoc = await loadOwnedList(listId, context.user._id);
 
     const data = sanitizeDocumentData(listDoc.fields as any, (input as any)?.data ?? {});
+
+    const conflict = await findUniqueFieldConflict(listDoc.fields as any, data, listId, context.user._id);
+    if (conflict) {
+        throw new ORPCError("CONFLICT", { status: 409, message: `"${conflict.label}" must be unique — that value is already used by another document.` });
+    }
+
     const doc = await ListDocument.create({ list: listId, owner: context.user._id, data });
     return serializeDocument(doc);
 });
@@ -135,7 +142,14 @@ export const update = authed.handler(async ({ input, context }) => {
 
     const body = (input as any) ?? {};
     if (body.data !== undefined) {
-        doc.data = sanitizeDocumentData(listDoc.fields as any, body.data);
+        const data = sanitizeDocumentData(listDoc.fields as any, body.data);
+
+        const conflict = await findUniqueFieldConflict(listDoc.fields as any, data, doc.list, context.user._id, doc._id);
+        if (conflict) {
+            throw new ORPCError("CONFLICT", { status: 409, message: `"${conflict.label}" must be unique — that value is already used by another document.` });
+        }
+
+        doc.data = data;
     }
 
     await doc.save();

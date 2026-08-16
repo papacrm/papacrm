@@ -1,5 +1,6 @@
 import ListDocument from "../models/ListDocument";
 import { sanitizeDocumentData } from "../listValidation";
+import { findUniqueFieldConflict } from "../listUnique";
 import { nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
 
@@ -78,6 +79,22 @@ const updateOneNode: NodeExecutor = {
         const sanitizedUpdate = sanitizeDocumentData(resolved.fields, update);
         const setFields: Record<string, unknown> = { updatedAt: Date.now() };
         for (const [key, value] of Object.entries(sanitizedUpdate)) setFields[`data.${key}`] = value;
+
+        // Only the upsert-a-new-document path can create a fresh unique-
+        // field clash — updating a document that already matches `filter`
+        // can't conflict with itself. So this only blocks when Match's
+        // own filter doesn't already point at an existing document (i.e.
+        // findOneAndUpdate is actually about to insert, not update).
+        if (upsert) {
+            const conflict = await findUniqueFieldConflict(resolved.fields, sanitizedUpdate, resolved.listId, resolved.owner);
+            if (conflict) {
+                const willUpdateExisting = await ListDocument.exists(filter as any);
+                if (!willUpdateExisting) {
+                    ctx.body = emptyResult();
+                    return { done: false, nextNodeIds };
+                }
+            }
+        }
 
         try {
             // includeResultMetadata surfaces lastErrorObject.upserted, the

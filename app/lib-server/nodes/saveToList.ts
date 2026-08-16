@@ -1,5 +1,6 @@
 import ListDocument from "../models/ListDocument";
 import { sanitizeDocumentData } from "../listValidation";
+import { findUniqueFieldConflict } from "../listUnique";
 import { nextEdgeTargets, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
 
@@ -50,6 +51,17 @@ const saveToListNode: NodeExecutor = {
 
         try {
             const sanitized = sanitizeDocumentData(resolved.fields, data);
+
+            // Same "skip quietly" spirit as the rest of this node: a
+            // unique-field clash isn't a run failure, it's just nowhere
+            // valid to save this particular document, so it comes out the
+            // same way "no chained list" does — `_saved: false`.
+            const conflict = await findUniqueFieldConflict(resolved.fields, sanitized, resolved.listId, resolved.owner);
+            if (conflict) {
+                ctx.body = emptyResult();
+                return { done: false, nextNodeIds };
+            }
+
             const created = await ListDocument.create({ list: resolved.listId, owner: resolved.owner, data: sanitized });
 
             // The inserted document, spread the same way Find One hands

@@ -25,7 +25,10 @@ export default function DocumentEditor({ fields, value, onChange, disabled }: Do
                 const inputId = `field-${field.key}`;
                 return (
                     <div key={field.key} className="flex flex-col gap-1.5">
-                        <Label htmlFor={inputId}>{field.label}</Label>
+                        <Label htmlFor={inputId}>
+                            {field.label}
+                            {field.unique && <span className="text-neutral-400"> (unique)</span>}
+                        </Label>
                         <FieldControl id={inputId} field={field} raw={value[field.key]} disabled={disabled} onChange={(v) => onChange(field.key, v)} />
                     </div>
                 );

@@ -239,6 +239,40 @@ export function nextEdgeTargets(node: IModuleNode, edges: IModuleEdge[], sourceH
     return edges.filter((e) => e.source === node.id && (sourceHandle === undefined || e.sourceHandle === sourceHandle)).map((e) => e.target);
 }
 
+// Distinct source nodes with an edge into `nodeId` — a node with 2+ of
+// these is a *join*. Shared with moduleEngine.ts (which uses it to decide
+// whether a node is a join at all) and with any node executor that needs
+// to recognize its own multi-input "wait" join body — see isJoinBody below.
+export function uniqueIncomingSources(edges: IModuleEdge[], nodeId: string): string[] {
+    return Array.from(new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source)));
+}
+
+// When a node has "Multiple inputs" set to Wait, moduleEngine's join (see
+// settleJoin in ../moduleEngine.ts) hands it a body namespaced by which
+// predecessor it arrived from — `{ [sourceNodeId]: bodyFromThatSource }` —
+// so a downstream {{sourceNodeId.field}} can target one specifically.
+// isJoinBody detects that shape; flattenJoinBody merges it back into one
+// plain object instead, so a node that wants *every* input combined can
+// just use {{field}} everywhere, same as a single input. If two inputs
+// share a prop name, the one that arrived later simply overwrites the
+// earlier one — Object.values walks the join body in the order its keys
+// were inserted, which is arrival order (settleJoin builds it by iterating
+// its `arrived` Map, itself populated in arrival order) — so this is "last
+// one in wins", not a lookup by source node id. Used by Mapper and JSON.
+export function isJoinBody(body: unknown, incomingSourceIds: string[]): body is Record<string, unknown> {
+    if (incomingSourceIds.length < 2) return false;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+    return incomingSourceIds.every((id) => id in (body as Record<string, unknown>));
+}
+
+export function flattenJoinBody(body: Record<string, unknown>): Record<string, any> {
+    const flat: Record<string, any> = {};
+    for (const part of Object.values(body)) {
+        if (part && typeof part === "object" && !Array.isArray(part)) Object.assign(flat, part);
+    }
+    return flat;
+}
+
 export function readPath(source: unknown, path: string): unknown {
     if (!source || !path) return undefined;
     return path.split(".").reduce<any>((acc, key) => (acc == null ? undefined : acc[key]), source);

@@ -9,6 +9,7 @@ export interface ListField {
     label: string;
     type: ListFieldType;
     options?: string[];
+    unique?: boolean;
 }
 
 export interface ListSummary {

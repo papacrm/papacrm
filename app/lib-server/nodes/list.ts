@@ -29,7 +29,7 @@ const listNode: NodeExecutor = {
                 return { done: false, nextNodeIds };
             }
 
-            const fields = (list.fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type }));
+            const fields = (list.fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type, unique: f.unique ?? undefined }));
 
             // Fetch documents for the selected list
             const documents = await ListDocument.find({ list: listId, owner: (list as any).owner }).lean();

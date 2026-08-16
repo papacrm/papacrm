@@ -10,6 +10,7 @@ export interface IListField {
     label: string; // what the person sees in the editor
     type: ListFieldType;
     options?: string[]; // only used when type === "select"
+    unique?: boolean; // when true, no two documents in the list may share a value for this field
 }
 
 export interface IList extends Document {
@@ -26,6 +27,7 @@ const ListFieldSchema = new Schema<IListField>(
         label: { type: String, required: true, trim: true },
         type: { type: String, required: true, enum: ["text", "number", "boolean", "date", "select"] },
         options: { type: [String], default: undefined },
+        unique: { type: Boolean, default: undefined },
     },
     { _id: false },
 );

@@ -37,10 +37,19 @@ export function sanitizeFields(fields: unknown): IListField[] {
                 .filter(Boolean)
                 .slice(0, MAX_OPTIONS);
         }
+        if ((raw as any).unique === true) field.unique = true;
         out.push(field);
     }
 
     return out;
+}
+
+// The subset of a list's schema that a document write needs to be checked
+// against for duplicates — see lib-server/listUnique.ts, which is what
+// actually queries for a conflicting document. Kept here next to
+// sanitizeFields since both read the same `unique` flag off a field.
+export function uniqueFields(fields: IListField[]): IListField[] {
+    return fields.filter((f) => f.unique);
 }
 
 // Only keeps data for keys that exist in the list's current schema, and

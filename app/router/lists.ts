@@ -17,6 +17,7 @@ function serializeList(doc: any) {
             label: f.label,
             type: f.type,
             options: f.options ?? undefined,
+            unique: f.unique ?? undefined,
         })),
         createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
         updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,

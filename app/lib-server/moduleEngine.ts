@@ -1,6 +1,6 @@
 import type { IModuleNode, IModuleEdge } from "./models/Module";
 import { NODE_EXECUTORS } from "./nodes";
-import { MAX_NODES, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
+import { MAX_NODES, uniqueIncomingSources, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
 
 export type { WebhookTrigger, ModuleResult };
 
@@ -11,16 +11,6 @@ export type { WebhookTrigger, ModuleResult };
 // types are trigger-capable.
 export function findWebhookNode(nodes: IModuleNode[], path: string, method: string): IModuleNode | undefined {
     return nodes.find((n) => NODE_EXECUTORS[n.type]?.matchesTrigger?.(n, path, method));
-}
-
-// Distinct source nodes with an edge into `nodeId` — a node with 2+ of
-// these is a *join*, handled specially in `runFrom` below. ModuleEditor's
-// inspector computes the same thing client-side (its own small inline
-// version, since it can't import server-only code) to show the matching
-// "multiple inputs" picker/reference list for any node type — this is a
-// generic engine capability, not specific to Mapper.
-function uniqueIncomingSources(edges: IModuleEdge[], nodeId: string): string[] {
-    return Array.from(new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source)));
 }
 
 export async function runModule(

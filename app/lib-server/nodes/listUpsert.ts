@@ -55,7 +55,7 @@ const listUpsertNode: NodeExecutor = {
                 created = true;
             }
 
-            const fields = ((listDoc as any).fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type }));
+            const fields = ((listDoc as any).fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type, unique: f.unique ?? undefined }));
             const documents = await ListDocument.find({ list: (listDoc as any)._id, owner }).lean();
 
             ctx.body = {
