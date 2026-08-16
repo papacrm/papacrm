@@ -54,6 +54,7 @@ export type ModuleNodeType =
     | "limit"
     | "skip"
     | "list"
+    | "listUpsert"
     | "count"
     | "distinct"
     | "delay"
@@ -147,6 +148,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "limit",
                 "skip",
                 "list",
+                "listUpsert",
                 "count",
                 "distinct",
                 "delay",

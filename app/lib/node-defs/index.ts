@@ -49,6 +49,7 @@ import sortNode from "./sort";
 import limitNode from "./limit";
 import skipNode from "./skip";
 import listNode from "./list";
+import listUpsertNode from "./listUpsert";
 import countNode from "./count";
 import distinctNode from "./distinct";
 import delayNode from "./delay";
@@ -118,6 +119,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     limit: limitNode,
     skip: skipNode,
     list: listNode,
+    listUpsert: listUpsertNode,
     count: countNode,
     distinct: distinctNode,
     delay: delayNode,
@@ -184,6 +186,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "limit",
     "skip",
     "list",
+    "listUpsert",
     "count",
     "distinct",
     "delay",
@@ -212,6 +215,7 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     function: "triggers",
 
     list: "data",
+    listUpsert: "data",
     find: "data",
     findOne: "data",
     query: "data",

@@ -18,7 +18,7 @@ const MAX_NAME_LENGTH = 120;
 // purpose — see manifest.ts).
 const ID_RE = /^[a-z0-9][a-z0-9-_]{0,63}$/;
 
-function serialize(m: ReturnType<typeof getLocalModule>) {
+function serialize(m: Awaited<ReturnType<typeof getLocalModule>>) {
     if (!m) return m;
     return { ...m, isDev };
 }
@@ -112,12 +112,12 @@ function requireDev() {
 // returned alongside the modules (rather than only per-module) so the
 // client still knows which mode it's in even when the list is empty.
 export const list = authed.handler(async () => {
-    return { isDev, modules: getLocalModules().map((m) => serialize(m)) };
+    return { isDev, modules: (await getLocalModules()).map((m) => serialize(m)) };
 });
 
 export const get = authed.handler(async ({ input }) => {
     const id = String((input as any)?.id ?? "");
-    const m = getLocalModule(id);
+    const m = await getLocalModule(id);
     if (!m) throw new ORPCError("NOT_FOUND", { status: 404, message: "Local module not found" });
     return serialize(m);
 });
@@ -132,7 +132,7 @@ export const create = authed.handler(async ({ input }) => {
             message: "Id must be lowercase letters, numbers, - or _, start with a letter/number, and can't be \"manifest\".",
         });
     }
-    if (getLocalModule(id)) {
+    if (await getLocalModule(id)) {
         throw new ORPCError("BAD_REQUEST", { status: 400, message: "A local module with this id already exists." });
     }
 
@@ -159,7 +159,7 @@ export const update = authed.handler(async ({ input }) => {
     requireDev();
     const body = (input as any) ?? {};
     const id = String(body.id ?? "");
-    const existing = getLocalModule(id);
+    const existing = await getLocalModule(id);
     if (!existing) throw new ORPCError("NOT_FOUND", { status: 404, message: "Local module not found" });
 
     const next = { name: existing.name, active: existing.active, nodes: existing.nodes, edges: existing.edges };
@@ -197,7 +197,7 @@ export const update = authed.handler(async ({ input }) => {
 export const remove = authed.handler(async ({ input }) => {
     requireDev();
     const id = String((input as any)?.id ?? "");
-    if (!getLocalModule(id)) throw new ORPCError("NOT_FOUND", { status: 404, message: "Local module not found" });
+    if (!(await getLocalModule(id))) throw new ORPCError("NOT_FOUND", { status: 404, message: "Local module not found" });
 
     const { fs, path } = await nodeFs();
     const dir = await localModulesDir();

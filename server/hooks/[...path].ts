@@ -37,7 +37,7 @@ async function handle(req: ApiRequest, res: ApiResponse) {
     // access needed), so they're checked first and, on a hit, answer the
     // request without ever calling connectDB(). This is what gives them
     // both "priority" and "loads faster" over the DB-backed path below.
-    const localMatch = findLocalWebhookNode(path, method);
+    const localMatch = await findLocalWebhookNode(path, method);
     if (localMatch) {
         match = {
             module: { _id: `local:${localMatch.module.id}`, nodes: localMatch.module.nodes, edges: localMatch.module.edges },

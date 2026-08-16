@@ -78,7 +78,7 @@ async function tryHandleWebhook(
     // without ever calling connectDB(). Mirrors the same check in
     // server/hooks/[...path].ts, which this root-level routing replaced —
     // dropping it here is what left local modules unreachable at "/".
-    const localMatch = findLocalWebhookNode(path, method);
+    const localMatch = await findLocalWebhookNode(path, method);
     if (localMatch) {
         match = {
             module: { _id: `local:${localMatch.module.id}`, nodes: localMatch.module.nodes, edges: localMatch.module.edges },
