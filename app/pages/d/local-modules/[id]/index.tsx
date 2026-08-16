@@ -1,8 +1,8 @@
 import { useHtml } from "nukejs";
-import LocalModuleEditor from "../../../../components/local-modules/LocalModuleEditor";
+import LocalModuleEditorLoader from "../../../../components/local-modules/LocalModuleEditorLoader";
 
 export default function LocalModuleEditorPage() {
     useHtml({ title: "Local Module" });
 
-    return <LocalModuleEditor />;
+    return <LocalModuleEditorLoader />;
 }

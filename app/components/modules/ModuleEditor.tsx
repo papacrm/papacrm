@@ -89,6 +89,21 @@ interface ModuleEditorProps {
         nodes: ModuleNode[];
         edges: ModuleEdge[];
     };
+    // "module" (default) is the DB-backed editor at /d/modules/[id]. "local"
+    // is a file-backed module from app/local-modules (see
+    // app/lib-server/localModules.ts) opened via /d/local-modules/[id] —
+    // same canvas, same node palette, just a different save/delete target
+    // (orpc.localModule.* instead of orpc.module.*) and back link.
+    kind?: "module" | "local";
+    // Where "← Modules" / delete-then-redirect point. Defaults to the
+    // DB-backed modules list.
+    backHref?: string;
+    // True for a local module viewed outside dev mode: the server
+    // (app/router/localModules.ts's requireDev()) refuses local-module
+    // writes there regardless, but disabling Save/Delete and the name/
+    // active fields here means the person sees why up front instead of
+    // hitting a 403 after editing.
+    readOnly?: boolean;
 }
 
 function newId(prefix: string): string {
@@ -113,7 +128,7 @@ function edgePathD(x1: number, y1: number, x2: number, y2: number) {
     return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 }
 
-export default function ModuleEditor({ module }: ModuleEditorProps) {
+export default function ModuleEditor({ module, kind = "module", backHref = "/d/modules", readOnly = false }: ModuleEditorProps) {
     const router = useRouter();
     const canvasRef = useRef<HTMLDivElement>(null);
     const nodesRef = useRef<ModuleNode[]>(module.nodes);
@@ -376,6 +391,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     function startLayoutDrag(e: React.MouseEvent, viewId: string, childId: string, pos: Required<ViewLayoutEntry>, mode: "move" | "resize") {
         e.preventDefault();
         e.stopPropagation();
+        if (readOnly) return;
         const rect = designerRef.current?.getBoundingClientRect();
         if (!rect) return;
         layoutDragRef.current = {
@@ -394,6 +410,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     function handleNodeMouseDown(e: React.MouseEvent, node: ModuleNode) {
         e.stopPropagation();
         setSelectedNodeId(node.id);
+        if (readOnly) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
@@ -405,12 +422,14 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     function handleOutputMouseDown(e: React.MouseEvent, node: ModuleNode, handle: string | null) {
         e.stopPropagation();
         e.preventDefault();
+        if (readOnly) return;
         connectRef.current = { fromId: node.id, handle };
         const from = outputHandlePosition(node, handle);
         setConnectingLine({ x1: from.x, y1: from.y, x2: from.x, y2: from.y });
     }
 
     function addNode(type: ModuleNodeType) {
+        if (readOnly) return;
         const def = NODE_DEFS[type];
         const index = nodes.length;
         const node: ModuleNode = {
@@ -426,6 +445,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     }
 
     function deleteNode(nodeId: string) {
+        if (readOnly) return;
         setNodes((prev) => prev.filter((n) => n.id !== nodeId));
         setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
         setSelectedNodeId((prev) => (prev === nodeId ? null : prev));
@@ -433,6 +453,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     }
 
     function updateNodeData(nodeId: string, key: string, value: string | boolean) {
+        if (readOnly) return;
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, [key]: value } } : n)));
         setDirty(true);
     }
@@ -442,6 +463,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     // sets both `functionId` and a denormalized `functionName` in one go,
     // so the node card never shows one without the other mid-update.
     function updateNodeDataMulti(nodeId: string, patch: Record<string, string>) {
+        if (readOnly) return;
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
         setDirty(true);
     }
@@ -451,6 +473,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     // order blocks were connected in. See the "Layout" section of the
     // inspector below and lib/nodes/view.ts (the server-side reader).
     function updateViewLayout(viewNodeId: string, childId: string, patch: ViewLayoutEntry) {
+        if (readOnly) return;
         setNodes((prev) =>
             prev.map((n) => {
                 if (n.id !== viewNodeId) return n;
@@ -463,6 +486,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
     }
 
     function deleteEdge(edgeId: string) {
+        if (readOnly) return;
         setEdges((prev) => prev.filter((e) => e.id !== edgeId));
         setDirty(true);
     }
@@ -489,24 +513,37 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
         setError(null);
         setSaved(false);
         try {
-            await withAuthRetry(() => orpc.module.update({ id: module._id, name: name.trim() || "Untitled module", active, nodes, edges }));
+            if (kind === "local") {
+                await withAuthRetry(() =>
+                    orpc.localModule.update({ id: module._id, name: name.trim() || module._id, active, nodes, edges }),
+                );
+            } else {
+                await withAuthRetry(() =>
+                    orpc.module.update({ id: module._id, name: name.trim() || "Untitled module", active, nodes, edges }),
+                );
+            }
             setDirty(false);
             setSaved(true);
         } catch (err) {
-            setError(err instanceof ORPCError ? err.message : "Couldn't save the module.");
+            setError(err instanceof ORPCError ? err.message : `Couldn't save the ${kind === "local" ? "local module" : "module"}.`);
         } finally {
             setSaving(false);
         }
     }
 
     async function handleDelete() {
-        if (!confirm("Delete this module? This can't be undone.")) return;
+        const label = kind === "local" ? "local module file" : "module";
+        if (!confirm(`Delete this ${label}? This can't be undone.`)) return;
         setDeleting(true);
         try {
-            await withAuthRetry(() => orpc.module.remove({ id: module._id }));
-            router.push("/d/modules");
+            if (kind === "local") {
+                await withAuthRetry(() => orpc.localModule.remove({ id: module._id }));
+            } else {
+                await withAuthRetry(() => orpc.module.remove({ id: module._id }));
+            }
+            router.push(backHref);
         } catch (err) {
-            setError(err instanceof ORPCError ? err.message : "Couldn't delete the module.");
+            setError(err instanceof ORPCError ? err.message : `Couldn't delete the ${label}.`);
             setDeleting(false);
         }
     }
@@ -572,8 +609,8 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
         <div className="flex h-full flex-col overflow-hidden">
             {/* Top bar */}
             <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-neutral-200 px-6 py-3">
-                <Link href="/d/modules" className="text-sm text-neutral-500 hover:text-neutral-900">
-                    ← Modules
+                <Link href={backHref} className="text-sm text-neutral-500 hover:text-neutral-900">
+                    ← {kind === "local" ? "Local modules" : "Modules"}
                 </Link>
                 <Input
                     value={name}
@@ -581,6 +618,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                         setName(e.target.value);
                         setDirty(true);
                     }}
+                    disabled={readOnly}
                     className="h-8 max-w-xs font-medium"
                 />
                 <div className="inline-flex items-center gap-2 px-1 text-xs font-medium">
@@ -590,6 +628,7 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                             setActive(checked);
                             setDirty(true);
                         }}
+                        disabled={readOnly}
                         aria-label={active ? "Module is active" : "Module is inactive"}
                     />
                     <span className={active ? "text-emerald-700" : "text-neutral-500"}>{active ? "Active" : "Inactive"}</span>
@@ -598,18 +637,29 @@ export default function ModuleEditor({ module }: ModuleEditorProps) {
                 <div className="ml-auto flex items-center gap-3">
                     {error && <span className="text-sm text-destructive">{error}</span>}
                     {!error && saved && !dirty && <span className="text-sm text-neutral-400">Saved</span>}
-                    {dirty && !saving && <span className="text-sm text-neutral-400">Unsaved changes</span>}
+                    {dirty && !saving && !readOnly && <span className="text-sm text-neutral-400">Unsaved changes</span>}
                     <Button type="button" variant="outline" size="sm" onClick={handleExport}>
                         Export
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={deleting}>
-                        {deleting ? "Deleting…" : "Delete"}
-                    </Button>
-                    <Button type="button" size="sm" onClick={handleSave} disabled={saving || !dirty}>
-                        {saving ? "Saving…" : "Save"}
-                    </Button>
+                    {!readOnly && (
+                        <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={deleting}>
+                            {deleting ? "Deleting…" : "Delete"}
+                        </Button>
+                    )}
+                    {!readOnly && (
+                        <Button type="button" size="sm" onClick={handleSave} disabled={saving || !dirty}>
+                            {saving ? "Saving…" : "Save"}
+                        </Button>
+                    )}
                 </div>
             </div>
+
+            {readOnly && (
+                <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-800">
+                    Running in production mode — this local module is read-only. It was fixed at publish time; switch to dev mode to
+                    change it.
+                </p>
+            )}
 
             <div className="flex min-h-0 flex-1">
                 {/* Palette */}
