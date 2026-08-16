@@ -29,8 +29,8 @@ function buildFilter(match: Record<string, unknown>, listId: string, owner: unkn
 }
 
 // Shared by every "nothing matched (and nothing was upserted)" branch
-// below — same underscore-prefixed convention as Find One's "_found" and
-// Save to List's "_saved".
+// below — same underscore-prefixed convention Save to List's "_saved"
+// uses.
 function emptyResult() {
     return { _matched: false, _upserted: false };
 }

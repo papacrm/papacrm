@@ -99,7 +99,11 @@ export interface ModuleField {
     // Save to List used to have a "lists" field here too, but no longer
     // does — it reads its target list off the previous node's data at
     // runtime instead (see lib-server/nodes/saveToList.ts).
-    dynamicOptions?: "lists" | "modules";
+    // "findFields" backs the field-selection checkboxes used by Project
+    // (reading the list off a chained Find node), and by Find and Find
+    // One themselves (reading their own list) — see ModuleEditor's
+    // dynamicOptions handling.
+    dynamicOptions?: "lists" | "modules" | "findFields";
 }
 
 export interface InspectorNote {

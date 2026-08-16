@@ -1,4 +1,4 @@
-import { findOwnedListByName, listDocumentsForList, matchesWhere } from "./listData";
+import { findOwnedListByName, findOneDocument } from "./listData";
 import { nextEdgeTargets, renderTemplate, type NodeExecutor } from "./types";
 
 const findOneNode: NodeExecutor = {
@@ -18,20 +18,33 @@ const findOneNode: NodeExecutor = {
         if (listName) {
             const list = await findOwnedListByName(listName, ctx.moduleId);
             if (list) {
-                const all = await listDocumentsForList(list);
-                // No where field set: just take the first record in the
-                // list, same "no filter" behavior Query has for "all of".
-                found = whereField ? all.find((doc) => matchesWhere(doc, whereField, whereOperator, whereValue)) : all[0];
+                // A real findOne() — the where filter runs inside Mongo
+                // itself via ListDocument.findOne(...).lean(), rather than
+                // fetching every document in the list and filtering with
+                // Array.find in JS like this node used to. Field selection
+                // (which properties come back) is Project's job — chain
+                // one after this node to trim the result down.
+                found = await findOneDocument(list, whereField, whereOperator, whereValue);
             }
         }
 
         // Unlike Query — which hands the next node a { fields, documents }
         // shape for Table to render — Find One hands the next node the
         // matching record's own fields directly, so {{field}} reads them
-        // the same way it reads a submitted form's fields. `_id`/`_found`
-        // are underscore-prefixed so they don't collide with a real field
-        // of the same name.
-        const record = { ...(found?.data ?? {}), _id: found?._id ?? null, _found: Boolean(found) };
+        // the same way it reads a submitted form's fields. `_id` is
+        // underscore-prefixed so it doesn't collide with a real field of
+        // the same name.
+        if (!found) {
+            // No match: Merge mode has nothing to merge in, so leave
+            // whatever was already on ctx.body untouched. Replace mode (the
+            // default) has nothing to replace it with, so ctx.body becomes
+            // null — chain a Condition node checking `{{_id}}` exists (or
+            // just testing truthiness of the body) to branch on a miss.
+            if (node.data?.mode !== "merge") ctx.body = null;
+            return { done: false, nextNodeIds };
+        }
+
+        const record = { ...found.data, _id: found._id };
         const existing = ctx.body && typeof ctx.body === "object" ? ctx.body : {};
         ctx.body = node.data?.mode === "merge" ? { ...existing, ...record } : record;
 

@@ -889,12 +889,48 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             </div>
 
                             {NODE_DEFS[selectedNode.type].fields.map((field) => {
-                                // Special handling for Project node with findFields
+                                // The field-selection checkboxes live only on Project —
+                                // it reads the list schema off whichever data node feeds
+                                // it, walking back through any pass-through pipeline
+                                // nodes (Match/Sort/Limit/Skip) in between to find the
+                                // actual source: Find/List (by id) or Find One/Query
+                                // (by name-match against your Lists).
                                 if (field.kind === "select" && field.dynamicOptions === "findFields" && selectedNode.type === "project") {
-                                    const findEdge = edges.find((e) => e.target === selectedNode.id && nodes.find((n) => n.id === e.source)?.type === "find");
-                                    const findNode = findEdge ? nodes.find((n) => n.id === findEdge.source) : null;
-                                    const findListId = findNode?.data?.list;
-                                    const findList = lists?.find((l) => l._id === findListId);
+                                    const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip"];
+                                    const ID_SOURCE_TYPES: ModuleNodeType[] = ["find", "list"];
+                                    const NAME_SOURCE_TYPES: ModuleNodeType[] = ["findOne", "query"];
+
+                                    let sourceNode: ModuleNode | null = null;
+                                    let cursorId: string | null = selectedNode.id;
+                                    const visited = new Set<string>();
+                                    while (cursorId && !visited.has(cursorId)) {
+                                        visited.add(cursorId);
+                                        const edge = edges.find((e) => e.target === cursorId);
+                                        const upstream = edge ? nodes.find((n) => n.id === edge.source) : undefined;
+                                        if (!upstream) break;
+                                        if (ID_SOURCE_TYPES.includes(upstream.type) || NAME_SOURCE_TYPES.includes(upstream.type)) {
+                                            sourceNode = upstream;
+                                            break;
+                                        }
+                                        if (PASSTHROUGH_TYPES.includes(upstream.type)) {
+                                            cursorId = upstream.id;
+                                            continue;
+                                        }
+                                        break;
+                                    }
+
+                                    const findNode = sourceNode;
+                                    const findList: { _id: string; name: string; fields?: { key: string; label: string; type: string }[] } | undefined = (() => {
+                                        if (!sourceNode) return undefined;
+                                        if (ID_SOURCE_TYPES.includes(sourceNode.type)) {
+                                            return lists?.find((l) => l._id === sourceNode!.data?.list);
+                                        }
+                                        const name = String(sourceNode.data?.listName ?? sourceNode.data?.name ?? "").trim().toLowerCase();
+                                        return name ? lists?.find((l) => l.name.trim().toLowerCase() === name) : undefined;
+                                    })();
+
+                                    const noListMessage = sourceNode && NAME_SOURCE_TYPES.includes(sourceNode.type) ? "No list matches that name" : "No list selected";
+
                                     const selectedFields = (() => {
                                         try {
                                             return JSON.parse(selectedNode.data?.[field.key] ?? "[]");
@@ -907,9 +943,9 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                         <div key={field.key} className="flex flex-col gap-3">
                                             <Label>{field.label}</Label>
                                             {!findNode ? (
-                                                <p className="text-sm text-neutral-500">Chain from a Find node to see fields</p>
+                                                <p className="text-sm text-neutral-500">Chain from a Find, Find One, List, or Query node to see fields</p>
                                             ) : !findList ? (
-                                                <p className="text-sm text-neutral-500">No list selected in Find node</p>
+                                                <p className="text-sm text-neutral-500">{noListMessage}</p>
                                             ) : (
                                                 <div className="flex flex-col gap-2">
                                                     {/* Always include _id */}

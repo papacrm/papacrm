@@ -39,7 +39,8 @@ const findOneNode: ModuleNodeDef = {
               : `First of ${data.listName}`,
     inspectorNote: () => ({
         label: "Tip",
-        value: "Passes the found record's own fields to the next node, so {{field}} reads them the same way a submitted form's fields would. No match just means those lookups come back empty.",
+        value:
+            "Passes the found record's own fields to the next node, so {{field}} reads them the same way a submitted form's fields would. No match: in Replace mode the next node gets null; in Merge mode whatever was already there passes through untouched.",
     }),
 };
 

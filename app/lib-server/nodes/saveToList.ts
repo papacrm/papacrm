@@ -6,8 +6,8 @@ import { resolveListTarget } from "./listResolve";
 
 // Shared by every "nothing was actually saved" branch below (no chained
 // list, an unresolvable one, or a write error) — same underscore-prefixed
-// "_saved" flag a downstream node checks, mirroring how Find One's output
-// carries "_found".
+// "_saved" flag a downstream node checks, mirroring Update One's
+// "_matched"/"_upserted".
 function emptyResult() {
     return { _saved: false };
 }

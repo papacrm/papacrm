@@ -80,3 +80,83 @@ export async function listDocumentsForList(list: any) {
         .lean();
     return documents.map((d: any) => ({ _id: String(d._id), data: d.data ?? {}, createdAt: d.createdAt }));
 }
+
+// Mongo-level equivalent of matchesWhere above — used by findOneDocument
+// and findDocuments so filtering happens inside the query itself (a real
+// findOne()/find()) instead of pulling every document into memory first
+// and filtering in JS. `equals`/`notEquals` compare as strings via $expr
+// + $toString to match matchesWhere's `String(haystack ?? "") === value`
+// semantics regardless of the field's actual stored type; `contains` only
+// ever matches an actual string field, same as matchesWhere's `typeof
+// haystack === "string"` guard.
+function buildWhereQuery(field: string, operator: string, value: string): Record<string, any> {
+    if (!field) return {};
+    const path = `$data.${field}`;
+    const asString = { $toString: { $ifNull: [path, ""] } };
+
+    switch (operator) {
+        case "notEquals":
+            return { $expr: { $ne: [asString, value] } };
+        case "contains":
+            return { [`data.${field}`]: { $regex: escapeRegExp(value) } };
+        case "equals":
+        default:
+            return { $expr: { $eq: [asString, value] } };
+    }
+}
+
+// Builds a Mongoose projection object from a list of selected field keys —
+// the same keys Project's checkboxes use. Kept available for Find/Find
+// One to pass through to Mongo if a future caller wants DB-level
+// projection; currently unused by either (field selection is Project's
+// job, applied in JS after the fetch — see ./project.ts) but harmless to
+// call with an empty selection, which returns `undefined` and applies no
+// restriction at all.
+export function buildProjection(fields: string[]): Record<string, 0 | 1> | undefined {
+    if (!fields || fields.length === 0) return undefined;
+    const projection: Record<string, 0 | 1> = { _id: 0 };
+    for (const key of fields) {
+        if (key === "_id") projection._id = 1;
+        else if (key === "createdAt") projection.createdAt = 1;
+        else if (key === "updatedAt") projection.updatedAt = 1;
+        else projection[`data.${key}`] = 1;
+    }
+    return projection;
+}
+
+// Real findOne() — used by Find One (./findOne.ts). Filters at the DB
+// level via buildWhereQuery inside a single findOne().lean() call, rather
+// than fetching every document of the list and filtering in JS like
+// listDocumentsForList does. `projectFields` is accepted for callers that
+// want DB-level projection, but Find One itself doesn't pass any — see
+// buildProjection above.
+export async function findOneDocument(
+    list: any,
+    whereField: string,
+    whereOperator: string,
+    whereValue: string,
+    projectFields: string[] = [],
+): Promise<{ _id: string; data: Record<string, any> } | undefined> {
+    await connectDB();
+    const query = { list: list._id, owner: list.owner, ...buildWhereQuery(whereField, whereOperator, whereValue) };
+    const doc = await ListDocument.findOne(query, buildProjection(projectFields)).lean();
+    if (!doc) return undefined;
+    return { _id: String((doc as any)._id), data: (doc as any).data ?? {} };
+}
+
+// Real find() — used by Find (./find.ts). Same DB-level filter treatment
+// as findOneDocument, capped at MAX_ROWS like the rest of this file.
+export async function findDocuments(
+    list: any,
+    whereField: string,
+    whereOperator: string,
+    whereValue: string,
+    projectFields: string[] = [],
+): Promise<{ _id: string; data: Record<string, any>; createdAt?: any; updatedAt?: any }[]> {
+    await connectDB();
+    const query = { list: list._id, owner: list.owner, ...buildWhereQuery(whereField, whereOperator, whereValue) };
+    const docs = await ListDocument.find(query, buildProjection(projectFields))
+        .limit(MAX_ROWS)
+        .lean();
+    return docs.map((d: any) => ({ _id: String(d._id), data: d.data ?? {}, createdAt: d.createdAt, updatedAt: d.updatedAt }));
+}

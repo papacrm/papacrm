@@ -3,7 +3,7 @@ import type { ModuleNodeDef } from "./types";
 const conditionNode: ModuleNodeDef = {
     type: "condition",
     label: "Condition",
-    description: "Branches the module based on a value",
+    description: "Branches the module based on a value. \"Pass data through\" controls whether the chosen branch's next node gets the current data as-is, or a clean empty object.",
     color: "#d97706",
     kind: "branch",
     fields: [
@@ -20,9 +20,17 @@ const conditionNode: ModuleNodeDef = {
             ],
         },
         { key: "value", label: "Value", kind: "text", placeholder: "ok" },
+        {
+            key: "passInput",
+            label: "Pass data through",
+            kind: "toggle",
+        },
     ],
-    defaultData: () => ({ field: "", operator: "equals", value: "" }),
-    summarize: (data) => (data?.field ? `${data.field} ${data.operator ?? "equals"} ${data.value ?? ""}` : "no field set"),
+    defaultData: () => ({ field: "", operator: "equals", value: "", passInput: true }),
+    summarize: (data) =>
+        data?.field
+            ? `${data.field} ${data.operator ?? "equals"} ${data.value ?? ""}${data?.passInput === false ? " (clears data)" : ""}`
+            : "no field set",
 };
 
 export default conditionNode;

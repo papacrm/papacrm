@@ -112,6 +112,18 @@ const projectNode: NodeExecutor = {
 
             ctx.body = { fields, documents: projectedDocuments };
         }
+        // Handle a flat single-record shape (e.g. Find One's output, which
+        // hands the next node the found record's own fields directly
+        // rather than a { fields, documents } list). Selected fields are
+        // read straight off the object — no `.data` nesting to unwrap,
+        // since Find One already flattened that.
+        else if (ctx.body && typeof ctx.body === "object") {
+            const projected: Record<string, any> = {};
+            for (const key of selectedFields) {
+                if (key in (ctx.body as any)) projected[key] = (ctx.body as any)[key];
+            }
+            ctx.body = projected;
+        }
 
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
     },

@@ -3,7 +3,7 @@ import type { ModuleNodeDef } from "./types";
 const projectNode: ModuleNodeDef = {
     type: "project",
     label: "Project",
-    description: "Select fields — chain from Find or another pipeline node",
+    description: "Select fields — chain from Find, Find One, List, or Query (through Match/Sort/Limit/Skip is fine too)",
     color: "#8b5cf6",
     kind: "terminal",
     fields: [
