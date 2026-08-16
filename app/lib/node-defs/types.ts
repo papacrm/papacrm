@@ -11,6 +11,7 @@ export type ModuleNodeType =
     | "inputForm"
     | "saveRecord"
     | "saveToList"
+    | "updateOne"
     | "mapper"
     | "function"
     | "call"
