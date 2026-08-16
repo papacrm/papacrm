@@ -93,8 +93,11 @@ export interface ModuleField {
     // For "select" fields whose options can't be known statically (e.g.
     // "pick one of your Lists") — the editor fetches the real options at
     // render time and uses those instead of `options` above. "modules"
-    // backs Call's "Module" picker the same way "lists" backs Save to
-    // List's — see ModuleEditor's dynamicOptions handling.
+    // backs Call's "Module" picker the same way "lists" backs List's and
+    // Count's "List" picker — see ModuleEditor's dynamicOptions handling.
+    // Save to List used to have a "lists" field here too, but no longer
+    // does — it reads its target list off the previous node's data at
+    // runtime instead (see lib-server/nodes/saveToList.ts).
     dynamicOptions?: "lists" | "modules";
 }
 

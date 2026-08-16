@@ -182,9 +182,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         setOrigin(window.location.origin);
     }, []);
 
-    // Backs any field with `dynamicOptions: "lists"` (currently just Save
-    // to List's "List" picker). Fetched once up front rather than lazily
-    // per-node so switching between nodes doesn't re-fetch or flash empty.
+    // Backs any field with `dynamicOptions: "lists"` (the List and Count
+    // nodes' "List" picker) as well as Project's findFields lookup below,
+    // which resolves a chained Find node's list to know what fields it
+    // can offer. Fetched once up front rather than lazily per-node so
+    // switching between nodes doesn't re-fetch or flash empty.
     useEffect(() => {
         (async () => {
             try {
