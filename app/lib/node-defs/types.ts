@@ -54,6 +54,7 @@ export type ModuleNodeType =
     | "limit"
     | "skip"
     | "list"
+    | "listUpsert"
     | "count"
     | "distinct"
     | "delay"
