@@ -1074,6 +1074,71 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 );
                             })}
 
+                            {(() => {
+                                // Any node reached by more than one distinct
+                                // predecessor is a *join* — see the
+                                // `incomingSources`/`joinStates` handling in
+                                // lib-server/moduleEngine.ts. Surfaced here for
+                                // every node type (not just Mapper) since the
+                                // engine treats it generically.
+                                const incomingIds = Array.from(
+                                    new Set(edges.filter((e) => e.target === selectedNode.id).map((e) => e.source)),
+                                );
+                                if (incomingIds.length < 2) return null;
+                                const incomingNodes = incomingIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is ModuleNode => Boolean(n));
+                                const joinMode = selectedNode.data?.joinMode === "wait" ? "wait" : "continue";
+
+                                return (
+                                    <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+                                        <div>
+                                            <Label>Multiple inputs</Label>
+                                            <p className="text-xs text-neutral-500">
+                                                This node is fed by {incomingIds.length} other nodes. Choose how it should handle that:
+                                            </p>
+                                        </div>
+                                        <select
+                                            value={joinMode}
+                                            onChange={(e) => updateNodeData(selectedNode.id, "joinMode", e.target.value)}
+                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                        >
+                                            <option value="continue">Continue after the first input arrives (runs once per input, like today)</option>
+                                            <option value="wait">Wait for every input, then run once with all of them combined</option>
+                                        </select>
+                                        {joinMode === "wait" && (
+                                            <div className="rounded-md bg-neutral-50 p-2">
+                                                {selectedNode.type === "mapper" ? (
+                                                    <p className="text-xs text-neutral-500">
+                                                        Mapper combines every input into a single object before mapping, so just use{" "}
+                                                        <code className="font-mono">{"{{field}}"}</code>. If two inputs share a field name, whichever
+                                                        one arrives last wins — there's no need to reference a source node's id.
+                                                    </p>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-xs text-neutral-500">
+                                                            Each input is namespaced by its source node's id, so use{" "}
+                                                            <code className="font-mono">{"{{nodeId.field}}"}</code> to read a specific one:
+                                                        </p>
+                                                        <ul className="mt-1 flex flex-col gap-0.5">
+                                                            {incomingNodes.map((n) => (
+                                                                <li key={n.id} className="flex items-center gap-1.5 text-xs">
+                                                                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: NODE_DEFS[n.type].color }} />
+                                                                    <span className="text-neutral-700">{NODE_DEFS[n.type].label}</span>
+                                                                    <code className="truncate font-mono text-neutral-400">{`{{${n.id}.…}}`}</code>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </>
+                                                )}
+                                                <p className="mt-1 text-xs text-amber-600">
+                                                    If one of these branches never actually fires this run (e.g. the untaken side of a Condition), this node
+                                                    waits up to a few seconds before running anyway with whichever inputs did arrive.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             {selectedNode.type === "class" &&
                                 (() => {
                                     // A Class node's own inspector is entirely dynamic: which

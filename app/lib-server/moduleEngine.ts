@@ -13,6 +13,16 @@ export function findWebhookNode(nodes: IModuleNode[], path: string, method: stri
     return nodes.find((n) => NODE_EXECUTORS[n.type]?.matchesTrigger?.(n, path, method));
 }
 
+// Distinct source nodes with an edge into `nodeId` — a node with 2+ of
+// these is a *join*, handled specially in `runFrom` below. ModuleEditor's
+// inspector computes the same thing client-side (its own small inline
+// version, since it can't import server-only code) to show the matching
+// "multiple inputs" picker/reference list for any node type — this is a
+// generic engine capability, not specific to Mapper.
+function uniqueIncomingSources(edges: IModuleEdge[], nodeId: string): string[] {
+    return Array.from(new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source)));
+}
+
 export async function runModule(
     nodes: IModuleNode[],
     edges: IModuleEdge[],
@@ -84,6 +94,51 @@ export async function runModule(
         return typeof structuredClone === "function" ? structuredClone(body) : JSON.parse(JSON.stringify(body));
     }
 
+    // Precomputed once for the whole run — the graph itself never changes
+    // mid-run, so there's no need to rescan `edges` on every arrival.
+    const incomingSources = new Map<string, string[]>(nodes.map((n) => [n.id, uniqueIncomingSources(edges, n.id)]));
+
+    // A node with 2+ distinct incoming sources whose own data opts it into
+    // "wait" (`joinMode: "wait"`, set from the inspector — see
+    // ModuleEditor's "Multiple inputs" picker) becomes a real join: every
+    // branch that reaches it records its own data here, namespaced by
+    // which predecessor it arrived from (`{ [sourceNodeId]: body }`), and
+    // the node only actually runs once — either the moment every expected
+    // predecessor has shown up, or (see JOIN_TIMEOUT_MS below) once it's
+    // waited long enough that any still-missing one almost certainly isn't
+    // coming, e.g. the untaken side of a Condition. `resolve` is how every
+    // branch that reached this same join — not just whichever one
+    // triggered the actual run — ends up with that one shared result
+    // instead of the node running again for each of them.
+    interface JoinState {
+        arrived: Map<string, unknown>;
+        settled: boolean;
+        promise: Promise<ModuleResult | undefined>;
+        resolve: (result: ModuleResult | undefined) => void;
+        timer: ReturnType<typeof setTimeout>;
+    }
+    const joinStates = new Map<string, JoinState>();
+    const JOIN_TIMEOUT_MS = 5000;
+
+    function settleJoin(nodeId: string, state: JoinState) {
+        if (state.settled) return;
+        state.settled = true;
+        clearTimeout(state.timer);
+
+        const node = nodeById.get(nodeId);
+        if (!node || nodesRun >= MAX_NODES) {
+            state.resolve(undefined);
+            return;
+        }
+        nodesRun++;
+        const merged: Record<string, unknown> = {};
+        for (const [src, body] of state.arrived) merged[src] = body;
+        executeAndContinue(node, { ...ctx, body: merged }, false).then(state.resolve);
+    }
+
+    // Runs one node's executor and, unless it produced a result itself,
+    // recurses into whatever it's wired to next.
+    //
     // A node can fan out to more than one next node (e.g. one branch saves
     // to the database while a parallel branch renders the response page —
     // or, just as commonly, two branches independently reshape the same
@@ -93,17 +148,11 @@ export async function runModule(
     // via Promise.all. Only one HTTP response can ever be sent, so once
     // every branch has finished, the first one that actually produced a
     // result (not just a side effect) wins.
-    async function runFrom(nodeId: string, isEntry: boolean, branchCtx: NodeContext): Promise<ModuleResult | undefined> {
-        if (nodesRun >= MAX_NODES) return undefined; // guards against cycles
-        nodesRun++;
-
-        const node = nodeById.get(nodeId);
-        if (!node) return undefined;
-
+    async function executeAndContinue(node: IModuleNode, execCtx: NodeContext, isEntry: boolean): Promise<ModuleResult | undefined> {
         const executor = NODE_EXECUTORS[node.type];
         if (!executor) return undefined;
 
-        const outcome = await executor.run({ node, ctx: branchCtx, trigger, edges, nodes, isEntry });
+        const outcome = await executor.run({ node, ctx: execCtx, trigger, edges, nodes, isEntry });
         if (outcome.done) return outcome.result;
 
         // Every node reached from here on is a *chained* node, not the
@@ -118,10 +167,64 @@ export async function runModule(
         // them out from under a sibling branch's own List View — a race
         // depending only on which branch happened to run first. A single
         // next node is just this branch continuing its own chain, so it
-        // keeps sharing `branchCtx` unchanged (no clone needed).
-        const forkedCtxFor = (id: string) => (outcome.nextNodeIds.length > 1 ? { ...branchCtx, body: cloneBody(branchCtx.body) } : branchCtx);
-        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false, forkedCtxFor(id))));
+        // keeps sharing `execCtx` unchanged (no clone needed).
+        const forkedCtxFor = (id: string) => (outcome.nextNodeIds.length > 1 ? { ...execCtx, body: cloneBody(execCtx.body) } : execCtx);
+        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false, forkedCtxFor(id), node.id)));
         return branchResults.find((r) => r && r.kind !== "empty") ?? branchResults.find((r) => r !== undefined);
+    }
+
+    // `fromNodeId` is the node whose edge led here — undefined only for
+    // the run's own entry node, which by definition can't be a join.
+    async function runFrom(nodeId: string, isEntry: boolean, branchCtx: NodeContext, fromNodeId?: string): Promise<ModuleResult | undefined> {
+        if (nodesRun >= MAX_NODES) return undefined; // guards against cycles
+
+        const node = nodeById.get(nodeId);
+        if (!node) return undefined;
+        if (!NODE_EXECUTORS[node.type]) return undefined;
+
+        const sources = incomingSources.get(nodeId) ?? [];
+        const isWaitJoin = fromNodeId !== undefined && sources.length > 1 && String((node.data as any)?.joinMode ?? "continue") === "wait";
+
+        if (!isWaitJoin) {
+            nodesRun++;
+            return executeAndContinue(node, branchCtx, isEntry);
+        }
+
+        // Join: record this branch's contribution, namespaced by the node
+        // it arrived from rather than merged flat, so two inputs with the
+        // same field name don't clobber each other — a downstream
+        // {{field}} template reads a specific one via
+        // {{sourceNodeId.field}} (readPath in ./nodes/types.ts already
+        // walks dotted paths, so this needs no template-syntax changes).
+        let state = joinStates.get(nodeId);
+        if (!state) {
+            let resolve!: (result: ModuleResult | undefined) => void;
+            const promise = new Promise<ModuleResult | undefined>((res) => {
+                resolve = res;
+            });
+            const newState: JoinState = {
+                arrived: new Map(),
+                settled: false,
+                promise,
+                resolve,
+                timer: setTimeout(() => settleJoin(nodeId, newState), JOIN_TIMEOUT_MS),
+            };
+            // Never block the process/request from otherwise finishing on
+            // its own just because this timer is still pending.
+            if (typeof newState.timer.unref === "function") newState.timer.unref();
+            state = newState;
+            joinStates.set(nodeId, state);
+        }
+        state.arrived.set(fromNodeId, branchCtx.body);
+
+        // Every branch that reaches a join — whether it's the one that
+        // completes the set or one of the others still waiting behind it —
+        // ends up awaiting the exact same shared promise, resolved exactly
+        // once by settleJoin. That keeps this branch from running the node
+        // itself a second time no matter how many predecessors converge
+        // here.
+        if (state.arrived.size >= sources.length) settleJoin(nodeId, state);
+        return state.promise;
     }
 
     const result = await runFrom(actualStartNodeId, true, ctx);

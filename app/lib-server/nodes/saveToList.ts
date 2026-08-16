@@ -1,43 +1,42 @@
-import { connectDB } from "../mongoose";
-import List from "../models/List";
 import ListDocument from "../models/ListDocument";
-import Module from "../models/Module";
 import { sanitizeDocumentData } from "../listValidation";
 import { nextEdgeTargets, type NodeExecutor } from "./types";
-
-const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+import { resolveListTarget } from "./listResolve";
 
 const saveToListNode: NodeExecutor = {
-    async run({ node, ctx, edges }) {
-        // No config of its own anymore — the target list comes from
-        // whatever ran right before this node in the chain. Both List
-        // (lib-server/nodes/list.ts) and List (create if not exists)
-        // (lib-server/nodes/listUpsert.ts) set ctx.body.listId, so
-        // chaining either one straight into this node is enough to tell
-        // it where to save. The rest of ctx.body — whatever those nodes
-        // (or an earlier one) left on it — is used as the document data,
-        // same as before; sanitizeDocumentData already ignores any key
-        // that isn't one of the target list's own fields, so the extra
-        // `listId`/`fields`/`documents` a List node leaves behind are
-        // harmless.
-        const listId = String((ctx.body as any)?.listId ?? "").trim();
+    async run({ node, ctx, edges, nodes }) {
+        const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // A side effect, not a response — same shape as Save to Database:
-        // skip quietly (rather than failing the whole run) if the
-        // previous node hasn't resolved to a list yet, points at a
-        // deleted list, or — since a hand-edited node could reference any
-        // id — a list that doesn't belong to the module's own owner.
-        if (OBJECT_ID_RE.test(listId)) {
-            await connectDB();
-            const [list, module] = await Promise.all([List.findById(listId).lean(), Module.findById(ctx.moduleId).select("owner").lean()]);
+        // No config of its own — the *object to save* is whatever's
+        // already on ctx.body when this node runs (the same "current
+        // data" every other node reads/writes), and the *target list* is
+        // whichever List or List (create if not exists) node is chained
+        // right after it. That's the reverse of where the list used to
+        // come from: this node used to expect the List/List-upsert node
+        // to run first and leave a listId behind on ctx.body, which meant
+        // by the time Save to List ran, the object it was supposed to
+        // save had already been overwritten by that list node's own
+        // fields/documents output. Looking forward instead means the
+        // object a person actually wants saved — from an Input Form,
+        // Mapper, HTTP Request, etc. — is still intact on ctx.body right
+        // here.
+        const data = ctx.body ?? {};
+        const targetNode = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).find((n) => n && (n.type === "list" || n.type === "listUpsert"));
 
-            if (list && module && String((list as any).owner) === String((module as any).owner)) {
-                const data = sanitizeDocumentData((list as any).fields ?? [], ctx.body ?? {});
-                await ListDocument.create({ list: listId, owner: (list as any).owner, data });
+        // A side effect, not a response — same "skip quietly rather than
+        // fail the whole run" spirit as Save to Database: no chained
+        // list, a not-yet-configured List node, an empty List (create if
+        // not exists) name, or a resolution error all just mean there's
+        // nowhere to save, not that the run should error out.
+        if (targetNode) {
+            const resolved = await resolveListTarget(targetNode, ctx).catch(() => null);
+            if (resolved) {
+                const sanitized = sanitizeDocumentData(resolved.fields, data);
+                await ListDocument.create({ list: resolved.listId, owner: resolved.owner, data: sanitized });
             }
         }
 
-        return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
+        return { done: false, nextNodeIds };
     },
 };
 

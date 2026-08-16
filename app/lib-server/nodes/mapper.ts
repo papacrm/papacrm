@@ -15,6 +15,32 @@ function applyMapping(mapping: unknown, ctx: NodeContext): Record<string, any> {
     return out;
 }
 
+// When this node has "Multiple inputs" set to "Wait", moduleEngine's join
+// (see settleJoin in ../moduleEngine.ts) hands it a body namespaced by which
+// predecessor it arrived from — `{ [sourceNodeId]: bodyFromThatSource }` —
+// so a downstream node can target one specifically via
+// {{sourceNodeId.field}}. Mapper doesn't use that: it flattens the join
+// back into one plain object so the mapping can just use {{field}}
+// everywhere, same as a single input. If two inputs share a prop name, the
+// one that arrived later simply overwrites the earlier one — Object.values
+// walks the join body in the order its keys were inserted, which is arrival
+// order (settleJoin builds it by iterating its `arrived` Map, itself
+// populated in arrival order) — so this is "last one in wins", not a lookup
+// by source node id.
+function flattenJoinBody(body: Record<string, unknown>): Record<string, any> {
+    const flat: Record<string, any> = {};
+    for (const part of Object.values(body)) {
+        if (part && typeof part === "object" && !Array.isArray(part)) Object.assign(flat, part);
+    }
+    return flat;
+}
+
+function isJoinBody(ctx: NodeContext, incomingSourceIds: string[]): ctx is NodeContext & { body: Record<string, unknown> } {
+    if (incomingSourceIds.length < 2) return false;
+    if (!ctx.body || typeof ctx.body !== "object" || Array.isArray(ctx.body)) return false;
+    return incomingSourceIds.every((id) => id in (ctx.body as Record<string, unknown>));
+}
+
 const mapperNode: NodeExecutor = {
     run({ node, ctx, edges }) {
         let mapping: unknown = {};
@@ -26,8 +52,12 @@ const mapperNode: NodeExecutor = {
             mapping = {};
         }
 
-        const mapped = applyMapping(mapping, ctx);
-        const existing = ctx.body && typeof ctx.body === "object" ? ctx.body : {};
+        const incomingSourceIds = Array.from(new Set(edges.filter((e) => e.target === node.id).map((e) => e.source)));
+        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx, incomingSourceIds);
+        const effectiveCtx: NodeContext = waitJoin ? { ...ctx, body: flattenJoinBody(ctx.body) } : ctx;
+
+        const mapped = applyMapping(mapping, effectiveCtx);
+        const existing = effectiveCtx.body && typeof effectiveCtx.body === "object" ? effectiveCtx.body : {};
         ctx.body = node.data?.mode === "merge" ? { ...existing, ...mapped } : mapped;
 
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
