@@ -4,6 +4,7 @@ import { parseCookie, stringifySetCookie } from "cookie";
 import { connectDB } from "../../app/lib-server/mongoose";
 import Module from "../../app/lib-server/models/Module";
 import { findWebhookNode, runModule } from "../../app/lib-server/moduleEngine";
+import { findLocalWebhookNode } from "../../app/lib-server/localModules";
 import { WEBHOOK_PAGE_COMPONENTS } from "@/app/components/webhooks/registry";
 import { withPageExtras } from "@/app/components/webhooks/PageExtras";
 import RootLayout from "@/app/pages/layout";
@@ -28,20 +29,35 @@ async function handle(req: ApiRequest, res: ApiResponse) {
     const path = Array.isArray(segments) ? segments.join("/") : String(segments ?? "");
     const method = (req.method || "GET").toUpperCase();
 
-    await connectDB();
+    type MatchedModule = { _id: string; nodes: unknown; edges: unknown };
+    let match: { module: MatchedModule; nodeId: string } | undefined;
 
-    // Webhook paths aren't uniquely indexed (a user could reuse a slug
-    // across a couple of draft modules before activating one), so this
-    // scans active modules and takes the first path+method match — fine
-    // at this project's scale.
-    const modules = await Module.find({ active: true }).lean();
+    // Local (file-based) modules — see app/lib-server/localModules.ts —
+    // are already sitting in memory (bundled at build time, no fs/DB
+    // access needed), so they're checked first and, on a hit, answer the
+    // request without ever calling connectDB(). This is what gives them
+    // both "priority" and "loads faster" over the DB-backed path below.
+    const localMatch = findLocalWebhookNode(path, method);
+    if (localMatch) {
+        match = {
+            module: { _id: `local:${localMatch.module.id}`, nodes: localMatch.module.nodes, edges: localMatch.module.edges },
+            nodeId: localMatch.nodeId,
+        };
+    } else {
+        await connectDB();
 
-    let match: { module: (typeof modules)[number]; nodeId: string } | undefined;
-    for (const module of modules) {
-        const node = findWebhookNode(module.nodes as any, path, method);
-        if (node) {
-            match = { module, nodeId: node.id };
-            break;
+        // Webhook paths aren't uniquely indexed (a user could reuse a slug
+        // across a couple of draft modules before activating one), so this
+        // scans active modules and takes the first path+method match — fine
+        // at this project's scale.
+        const modules = await Module.find({ active: true }).lean();
+
+        for (const module of modules) {
+            const node = findWebhookNode(module.nodes as any, path, method);
+            if (node) {
+                match = { module: { _id: String(module._id), nodes: module.nodes, edges: module.edges }, nodeId: node.id };
+                break;
+            }
         }
     }
 
@@ -81,7 +97,7 @@ async function handle(req: ApiRequest, res: ApiResponse) {
         match.module.edges as any,
         match.nodeId,
         { method, path, query: req.query, body, headers, cookies },
-        String(match.module._id),
+        match.module._id,
     );
 
     // Set Header / Set Cookie nodes queue onto the result regardless of

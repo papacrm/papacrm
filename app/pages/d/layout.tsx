@@ -24,6 +24,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <Link href="/d/modules" className="hover:text-neutral-900">
                             Modules
                         </Link>
+                        <Link href="/d/local-modules" className="hover:text-neutral-900">
+                            Local Modules
+                        </Link>
                         <Link href="/d/lists" className="hover:text-neutral-900">
                             Lists
                         </Link>

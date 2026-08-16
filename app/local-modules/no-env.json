@@ -1,0 +1,263 @@
+{
+  "name": "Install — PapaCRM Landing",
+  "active": true,
+  "nodes": [
+    {
+      "id": "n_webhook_root",
+      "type": "webhook",
+      "x": 295,
+      "y": 33,
+      "data": {
+        "path": "",
+        "method": "GET",
+        "active": true
+      }
+    },
+    {
+      "id": "n_msunwkok_jikqs",
+      "type": "view",
+      "x": 1327,
+      "y": 233,
+      "data": {
+        "title": "My Page",
+        "layout": "{\"n_msunwvbf_nsm4d\":{\"col\":2,\"row\":1,\"span\":8},\"n_msunxa1a_l9hmc\":{\"col\":0,\"row\":2},\"n_msunxl2s_pes6o\":{\"col\":0,\"row\":0},\"n_msuo2f9q_rm88e\":{\"col\":0,\"row\":1}}"
+      }
+    },
+    {
+      "id": "n_msunwvbf_nsm4d",
+      "type": "image",
+      "x": 284,
+      "y": 386,
+      "data": {
+        "src": "/papacrm-logo.png",
+        "alt": ""
+      }
+    },
+    {
+      "id": "n_msunxa1a_l9hmc",
+      "type": "label",
+      "x": 275,
+      "y": 561,
+      "data": {
+        "field": "Own Your CRM"
+      }
+    },
+    {
+      "id": "n_msunxsz6_7apyl",
+      "type": "label",
+      "x": 279,
+      "y": 759,
+      "data": {
+        "field": "A flexible, community-driven CRM platform designed for businesses that want control over their data, modules, and future. Customize everything, automate anything, and grow without vendor lock-in."
+      }
+    },
+    {
+      "id": "n_msunyieu_qcrml",
+      "type": "class",
+      "x": 33,
+      "y": 460,
+      "data": {
+        "size": "4xl",
+        "textAlign": "center"
+      }
+    },
+    {
+      "id": "n_msunzjzz_rb7sk",
+      "type": "class",
+      "x": 30,
+      "y": 215,
+      "data": {
+        "custom": "",
+        "imgWidth": "32"
+      }
+    },
+    {
+      "id": "n_msuo1dos_7jddl",
+      "type": "env",
+      "x": 643,
+      "y": 28,
+      "data": {
+        "name": "MONGODB_URI1",
+        "fallback": "",
+        "as": "MONGODB_URI"
+      }
+    },
+    {
+      "id": "n_msuo21wp_d34pp",
+      "type": "condition",
+      "x": 935,
+      "y": 14,
+      "data": {
+        "field": "MONGODB_URI",
+        "operator": "exists",
+        "value": ""
+      }
+    },
+    {
+      "id": "n_msuo648s_6eulw",
+      "type": "view",
+      "x": 1379,
+      "y": 390,
+      "data": {
+        "title": "My Page",
+        "layout": "{\"n_msuo6bgs_0ngin\":{\"col\":1,\"row\":1,\"span\":10}}"
+      }
+    },
+    {
+      "id": "n_msuo6bgs_0ngin",
+      "type": "label",
+      "x": 1076,
+      "y": 572,
+      "data": {
+        "field": "Enter MONGODB_URI, ACCESS_SECRET and REFRESH_SECRET in .env or Environment variables "
+      }
+    },
+    {
+      "id": "n_msuo6qky_vzleh",
+      "type": "class",
+      "x": 786,
+      "y": 642,
+      "data": {
+        "bgColor": "red",
+        "textColor": "white",
+        "custom": "p-4",
+        "size": "lg"
+      }
+    },
+    {
+      "id": "n_msuprlsc_hb10a",
+      "type": "div",
+      "x": 778,
+      "y": 344,
+      "data": {
+        "layout": "{\"n_msunxsz6_7apyl\":{\"col\":0,\"row\":2},\"n_msunxa1a_l9hmc\":{\"col\":0,\"row\":1},\"n_msupud1k_fkt71\":{\"col\":0,\"row\":1},\"n_msupvdeq_vxc1q\":{\"col\":3,\"row\":2,\"span\":6}}"
+      }
+    },
+    {
+      "id": "n_msupwkvz_x40oq",
+      "type": "class",
+      "x": 32,
+      "y": 641,
+      "data": {
+        "textAlign": "center"
+      }
+    },
+    {
+      "id": "n_msuq1iia_kzk7h",
+      "type": "div",
+      "x": 527,
+      "y": 297,
+      "data": {
+        "layout": "{\"n_msunwvbf_nsm4d\":{\"col\":0,\"row\":0}}"
+      }
+    },
+    {
+      "id": "n_msuq1tke_ytuxf",
+      "type": "class",
+      "x": 283,
+      "y": 210,
+      "data": {
+        "justify": "center",
+        "custom": ""
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_msunyju1_nuzcy",
+      "source": "n_msunyieu_qcrml",
+      "target": "n_msunxa1a_l9hmc",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msunzlih_tx75a",
+      "source": "n_msunzjzz_rb7sk",
+      "target": "n_msunwvbf_nsm4d",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuo240a_upfip",
+      "source": "n_msuo1dos_7jddl",
+      "target": "n_msuo21wp_d34pp",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuo5nus_h1bxq",
+      "source": "n_msuo21wp_d34pp",
+      "target": "n_msunwkok_jikqs",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "e_msuo5sur_91275",
+      "source": "n_webhook_root",
+      "target": "n_msuo1dos_7jddl",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuo693b_3hxil",
+      "source": "n_msuo21wp_d34pp",
+      "target": "n_msuo648s_6eulw",
+      "sourceHandle": "false"
+    },
+    {
+      "id": "e_msuo6jck_jabdt",
+      "source": "n_msuo6bgs_0ngin",
+      "target": "n_msuo648s_6eulw",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuo6scg_rcsja",
+      "source": "n_msuo6qky_vzleh",
+      "target": "n_msuo6bgs_0ngin",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuprwie_0mosn",
+      "source": "n_msuprlsc_hb10a",
+      "target": "n_msunwkok_jikqs",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuprxbx_in4yx",
+      "source": "n_msuprlsc_hb10a",
+      "target": "n_msuo648s_6eulw",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msupwn7i_3n6b5",
+      "source": "n_msupwkvz_x40oq",
+      "target": "n_msunxsz6_7apyl",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuq12zw_d91gl",
+      "source": "n_msunxa1a_l9hmc",
+      "target": "n_msuprlsc_hb10a",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuq13zj_ger3n",
+      "source": "n_msunxsz6_7apyl",
+      "target": "n_msuprlsc_hb10a",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuq1lcp_h1e6r",
+      "source": "n_msunwvbf_nsm4d",
+      "target": "n_msuq1iia_kzk7h",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuq1m25_m55lh",
+      "source": "n_msuq1iia_kzk7h",
+      "target": "n_msuprlsc_hb10a",
+      "sourceHandle": null
+    },
+    {
+      "id": "e_msuq1vy6_8mfod",
+      "source": "n_msuq1tke_ytuxf",
+      "target": "n_msuq1iia_kzk7h",
+      "sourceHandle": null
+    }
+  ]
+}

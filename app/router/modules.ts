@@ -2,12 +2,8 @@ import { ORPCError } from "@orpc/server";
 import { authed } from "../lib-server/orpc/auth";
 import { connectDB } from "../lib-server/mongoose";
 import Module from "../lib-server/models/Module";
-import { NODE_EXECUTORS } from "../lib-server/nodes";
+import { sanitizeEdges, sanitizeNodes } from "../lib-server/sanitizeModuleGraph";
 
-// Derived from the node registry (lib/nodes) rather than hand-listed here —
-// a type only has to be registered once, in lib/nodes/index.ts, to be
-// accepted everywhere, including on save.
-const NODE_TYPES = new Set(Object.keys(NODE_EXECUTORS));
 const MAX_NAME_LENGTH = 120;
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -21,43 +17,6 @@ function serializeModule(doc: any) {
         createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
         updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
     };
-}
-
-// Never trust a saved graph blindly — drop anything that isn't a
-// recognised node type, and drop any edge that references a node that
-// doesn't exist in the same payload.
-function sanitizeNodes(nodes: unknown): any[] {
-    if (!Array.isArray(nodes)) return [];
-    return nodes
-        .filter((n) => n && typeof n === "object" && typeof n.id === "string" && NODE_TYPES.has(n.type))
-        .map((n) => ({
-            id: n.id,
-            type: n.type,
-            x: Number.isFinite(n.x) ? n.x : 0,
-            y: Number.isFinite(n.y) ? n.y : 0,
-            data: n.data && typeof n.data === "object" ? n.data : {},
-        }));
-}
-
-function sanitizeEdges(edges: unknown, nodeIds: Set<string>): any[] {
-    if (!Array.isArray(edges)) return [];
-    return edges
-        .filter(
-            (e) =>
-                e &&
-                typeof e === "object" &&
-                typeof e.id === "string" &&
-                typeof e.source === "string" &&
-                typeof e.target === "string" &&
-                nodeIds.has(e.source) &&
-                nodeIds.has(e.target),
-        )
-        .map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            sourceHandle: typeof e.sourceHandle === "string" ? e.sourceHandle : null,
-        }));
 }
 
 export const list = authed.handler(async ({ context }) => {
