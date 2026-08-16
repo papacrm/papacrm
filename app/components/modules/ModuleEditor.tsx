@@ -431,12 +431,33 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
     function addNode(type: ModuleNodeType) {
         if (readOnly) return;
         const def = NODE_DEFS[type];
-        const index = nodes.length;
+
+        // Drop the new node in the middle of whatever's currently
+        // scrolled into view, not a fixed spot on the (much larger)
+        // canvas — otherwise "Add node" on a canvas someone has scrolled
+        // around in lands the node off-screen. Falls back to the fixed
+        // top-left-ish spot below if the canvas hasn't mounted yet.
+        let x = 60;
+        let y = 60;
+        const canvas = canvasRef.current;
+        if (canvas) {
+            x = canvas.scrollLeft + canvas.clientWidth / 2 - NODE_WIDTH / 2;
+            y = canvas.scrollTop + canvas.clientHeight / 2 - NODE_HEIGHT / 2;
+        }
+        // Small stagger so adding several nodes in a row without moving
+        // the viewport doesn't stack them exactly on top of each other.
+        const stackIndex = nodes.length % 6;
+        x += (stackIndex % 3) * 28;
+        y += Math.floor(stackIndex / 3) * 28;
+
+        x = Math.max(0, Math.min(canvasSize.width - NODE_WIDTH, x));
+        y = Math.max(0, Math.min(canvasSize.height - NODE_HEIGHT, y));
+
         const node: ModuleNode = {
             id: newId("n"),
             type,
-            x: 60 + (index % 3) * 260,
-            y: 60 + Math.floor(index / 3) * 180,
+            x,
+            y,
             data: def.defaultData(),
         };
         setNodes((prev) => [...prev, node]);

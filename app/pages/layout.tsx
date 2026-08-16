@@ -4,13 +4,11 @@ import { useI18n } from "../lib/useI18n";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     try {
-        const {
-            t: {
-                site: { name },
-            },
-        } = useI18n();
+        // Site name no longer appended to the title (see title() below) —
+        // useI18n() is still called for its other setup side effects.
+        useI18n();
         useHtml({
-            title: (x) => `${x} - ${name}`,
+            title: (x) => `${x}`,
             link: [
                 { rel: "icon", href: "/favicon.ico" },
                 { rel: "stylesheet", href: "/styles.css" },

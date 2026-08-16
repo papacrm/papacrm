@@ -21,9 +21,34 @@ const divNode: ModuleNodeDef = {
     description: "A container you place other blocks inside — connect a Class node into it to style it",
     color: "#65a30d",
     kind: "action",
-    fields: [],
-    defaultData: () => ({ layout: "{}" }),
-    summarize: () => "Container",
+    // Everything else (direction, alignment, color, padding, ...) still
+    // needs a Class node chained in (see the comment above and class.ts),
+    // but gap is common enough — and meaningless on its own without a
+    // flex container — that it's offered directly here too: picking one
+    // implies `flex` the same way a Class node's own `gap` does (see
+    // resolveClassName's caller in lib-server/nodes/view.ts). A Class
+    // node's own `gap`, if one is chained in, takes priority over this.
+    fields: [
+        {
+            key: "gap",
+            label: "Gap",
+            kind: "select",
+            options: [
+                { value: "", label: "None" },
+                { value: "0", label: "0" },
+                { value: "1", label: "1 (0.25rem)" },
+                { value: "2", label: "2 (0.5rem)" },
+                { value: "3", label: "3 (0.75rem)" },
+                { value: "4", label: "4 (1rem)" },
+                { value: "6", label: "6 (1.5rem)" },
+                { value: "8", label: "8 (2rem)" },
+                { value: "10", label: "10 (2.5rem)" },
+                { value: "12", label: "12 (3rem)" },
+            ],
+        },
+    ],
+    defaultData: () => ({ layout: "{}", gap: "" }),
+    summarize: (data) => (data?.gap ? `Container · gap-${data.gap}` : "Container"),
 };
 
 export default divNode;

@@ -15,8 +15,9 @@ import countNode from "./count";
 import mapperNode from "./mapper";
 import queryNode from "./query";
 import findOneNode from "./findOne";
-import { resolveClassName } from "./class";
+import { findChainedClass, resolveClassName } from "./class";
 import { resolveStyleAttr } from "./style";
+import { GAP_CLASS } from "../../lib/tailwindClasses";
 
 function escapeHtml(text: string): string {
     return text
@@ -360,7 +361,20 @@ async function resolveChildren(view: IModuleNode, nodes: IModuleNode[], edges: I
             const style = resolveStyleAttr(child, nodes, edges, ctx);
             blocks.push({ type: "label", pos, text, className: className || undefined, style: style || undefined });
         } else if (child.type === "div") {
-            const className = resolveClassName(child, nodes, edges);
+            let className = resolveClassName(child, nodes, edges);
+            // The Div's own `gap` field (see lib/node-defs/div.ts) is a
+            // shortcut for the common "just space my children out" case
+            // that doesn't need a whole Class node wired in — but a
+            // chained Class node's own gap, if it set one, wins, so
+            // nothing is silently double-applied or overridden by a
+            // stale default sitting in the Div's own data.
+            const classNode = findChainedClass(child, nodes, edges);
+            const classNodeHasGap = Boolean((classNode?.data as { gap?: string } | undefined)?.gap);
+            if (!classNodeHasGap) {
+                const gap = String((child.data as { gap?: string } | undefined)?.gap ?? "");
+                const gapClass = GAP_CLASS[gap];
+                if (gapClass) className = className ? `${className} flex ${gapClass}` : `flex ${gapClass}`;
+            }
             const style = resolveStyleAttr(child, nodes, edges, ctx);
             const layoutMode: "grid" | "flow" = hasCustomLayout(child) ? "grid" : "flow";
             const nestedBlocks = await resolveChildren(child, nodes, edges, ctx, depth + 1);
