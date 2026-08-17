@@ -109,6 +109,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "inputForm",
                 "saveRecord",
                 "saveToList",
+                "updateOne",
                 "mapper",
                 "function",
                 "call",
