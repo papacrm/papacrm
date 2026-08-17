@@ -475,7 +475,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         setDirty(true);
     }
 
-    function updateNodeData(nodeId: string, key: string, value: string | boolean) {
+    function updateNodeData(nodeId: string, key: string, value: string | boolean | Record<string, string>) {
         if (readOnly) return;
         setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, [key]: value } } : n)));
         setDirty(true);
@@ -1140,7 +1140,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 const incomingIds = Array.from(
                                     new Set(edges.filter((e) => e.target === selectedNode.id).map((e) => e.source)),
                                 );
-                                if (incomingIds.length < 2) return null;
+                                if (incomingIds.length < 2 || selectedNode.type === "add") return null;
                                 const incomingNodes = incomingIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is ModuleNode => Boolean(n));
                                 const joinMode = selectedNode.data?.joinMode === "wait" ? "wait" : "continue";
 
@@ -1174,11 +1174,6 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                         just use e.g. <code className="font-mono">status</code>. If two inputs share a field name,
                                                         whichever one arrives last wins — there's no need to reference a source node's id.
                                                     </p>
-                                                ) : selectedNode.type === "add" ? (
-                                                    <p className="text-xs text-neutral-500">
-                                                        Add reads one number from each input — using "Field to sum" if set, otherwise each input's
-                                                        value itself — and adds them all together into one total. Non-numeric inputs just count as 0.
-                                                    </p>
                                                 ) : (
                                                     <>
                                                         <p className="text-xs text-neutral-500">
@@ -1205,6 +1200,74 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     </div>
                                 );
                             })()}
+
+                            {selectedNode.type === "add" &&
+                                (() => {
+                                    // Which UI applies depends on how many nodes are actually
+                                    // wired into this Add node — see app/lib/node-defs/add.ts
+                                    // and app/lib-server/nodes/add.ts for the matching runtime
+                                    // behavior.
+                                    const incomingIds = Array.from(new Set(edges.filter((e) => e.target === selectedNode.id).map((e) => e.source)));
+                                    const incomingNodes = incomingIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is ModuleNode => Boolean(n));
+                                    const data = selectedNode.data ?? {};
+
+                                    if (incomingNodes.length >= 2) {
+                                        const sumFields: Record<string, string> = data.sumFields ?? {};
+                                        return (
+                                            <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+                                                <div>
+                                                    <Label>Fields to sum</Label>
+                                                    <p className="text-xs text-neutral-500">
+                                                        Fed by {incomingNodes.length} other nodes. Enter which field to read a number from for each
+                                                        one — leave one blank to use that input's value itself.
+                                                    </p>
+                                                </div>
+                                                {incomingNodes.map((n) => (
+                                                    <div key={n.id} className="flex flex-col gap-1.5">
+                                                        <Label htmlFor={`add-field-${n.id}`}>{`Field for ${NODE_DEFS[n.type].label}`}</Label>
+                                                        <Input
+                                                            id={`add-field-${n.id}`}
+                                                            value={sumFields[n.id] ?? ""}
+                                                            onChange={(e) => updateNodeData(selectedNode.id, "sumFields", { ...sumFields, [n.id]: e.target.value })}
+                                                            placeholder="amount"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3">
+                                            {incomingNodes.length === 1 && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Label htmlFor="add-field">Field to read (optional)</Label>
+                                                    <Input
+                                                        id="add-field"
+                                                        value={data.field ?? ""}
+                                                        onChange={(e) => updateNodeData(selectedNode.id, "field", e.target.value)}
+                                                        placeholder="amount"
+                                                    />
+                                                    <p className="text-xs text-neutral-500">
+                                                        Leave blank to use {NODE_DEFS[incomingNodes[0].type].label}'s value itself.
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <div className="flex flex-col gap-1.5">
+                                                <Label htmlFor="add-number">Number to add</Label>
+                                                <Input
+                                                    id="add-number"
+                                                    value={data.number ?? ""}
+                                                    onChange={(e) => updateNodeData(selectedNode.id, "number", e.target.value)}
+                                                    placeholder="1"
+                                                />
+                                                {incomingNodes.length === 0 && (
+                                                    <p className="text-xs text-neutral-500">Nothing chained in yet — this just outputs the number entered here.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                             {selectedNode.type === "class" &&
                                 (() => {

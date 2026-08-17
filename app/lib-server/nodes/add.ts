@@ -11,31 +11,37 @@ function toNumber(value: unknown): number {
 
 const addNode: NodeExecutor = {
     run({ node, ctx, edges }) {
-        const field = String(node.data?.field ?? "").trim();
         const as = String(node.data?.as ?? "").trim() || "sum";
-
-        // Same join shape Mapper/Condition use (see isJoinBody/
-        // flattenJoinBody in ./types): with 2+ inputs and "Multiple
-        // inputs" set to Wait, ctx.body arrives namespaced by source node
-        // id — `{ [sourceNodeId]: bodyFromThatSource }`. Add sums one
-        // number *per input* (e.g. two Random nodes in Number mode wired
-        // in add up to one total), reading `field` out of each input's
-        // body — or, if Field is left blank, using that input's value
-        // itself when it's already a plain number.
         const incomingSourceIds = uniqueIncomingSources(edges, node.id);
-        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
 
         let total: number;
-        if (waitJoin) {
+        if (incomingSourceIds.length >= 2 && isJoinBody(ctx.body, incomingSourceIds)) {
+            // 2+ inputs: Add always waits for every one of them — see
+            // lib/node-defs/add.ts's defaultData, where joinMode is fixed
+            // to "wait" and never exposed as a toggle, since summing only
+            // makes sense once every input has actually arrived. Reads
+            // one number per input — the field named for that source in
+            // "sumFields" (set per-input in the inspector), or that
+            // input's own value if left blank for that source.
             const parts = ctx.body as Record<string, unknown>;
-            total = incomingSourceIds.reduce((sum, id) => sum + toNumber(field ? readPath(parts[id], field) : parts[id]), 0);
+            const sumFields = (node.data?.sumFields ?? {}) as Record<string, string>;
+            total = incomingSourceIds.reduce((sum, id) => {
+                const fieldName = String(sumFields[id] ?? "").trim();
+                const value = fieldName ? readPath(parts[id], fieldName) : parts[id];
+                return sum + toNumber(value);
+            }, 0);
             // Flatten the join body back into one plain object for
             // whatever's chained after this, same as Mapper/JSON/
             // Condition do — so a downstream node can just use {{field}}
             // instead of needing a source node's id.
             ctx.body = flattenJoinBody(parts);
         } else {
-            total = toNumber(field ? readPath(ctx.body, field) : ctx.body);
+            // 0 or 1 input: read one number — via "Field" if set, else
+            // the whole input value — and add the literal "Number" box
+            // to it. With no input at all this is just the "Number" box.
+            const field = String(node.data?.field ?? "").trim();
+            const value = field ? readPath(ctx.body, field) : ctx.body;
+            total = toNumber(value) + toNumber(node.data?.number ?? 0);
         }
 
         const existing = ctx.body && typeof ctx.body === "object" ? ctx.body : {};
