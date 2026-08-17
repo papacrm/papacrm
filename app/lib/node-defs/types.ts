@@ -65,7 +65,8 @@ export type ModuleNodeType =
     | "env"
     | "text"
     | "image"
-    | "selectInput";
+    | "selectInput"
+    | "consoleLog";
 
 // Groups nodes in the editor's palette (see ModuleEditor.tsx). Purely a
 // UI grouping — has no effect on execution. To add a new category, add it

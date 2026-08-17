@@ -62,6 +62,7 @@ import envNode from "./env";
 import textNode from "./text";
 import imageNode from "./image";
 import selectInputNode from "./selectInput";
+import consoleLogNode from "./consoleLog";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib-server/nodes/<name>.ts` exporting a NodeExecutor (copy an
@@ -134,6 +135,7 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     text: textNode,
     image: imageNode,
     selectInput: selectInputNode,
+    consoleLog: consoleLogNode,
 };
 
 export * from "./types";

@@ -61,6 +61,7 @@ import envNode from "./env";
 import textNode from "./text";
 import imageNode from "./image";
 import selectInputNode from "./selectInput";
+import consoleLogNode from "./consoleLog";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib/node-defs/<name>.ts` exporting a ModuleNodeDef (copy an
@@ -134,6 +135,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     text: textNode,
     image: imageNode,
     selectInput: selectInputNode,
+    consoleLog: consoleLogNode,
 };
 
 export const NODE_ORDER: ModuleNodeType[] = [
@@ -199,6 +201,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "count",
     "distinct",
     "delay",
+    "consoleLog",
 ];
 
 // ─── Editor palette categories ────────────────────────────────────────
@@ -245,6 +248,7 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     route: "logic",
     forward: "logic",
     delay: "logic",
+    consoleLog: "logic",
 
     httpRequest: "requests",
     getHeader: "requests",

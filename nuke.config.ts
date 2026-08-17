@@ -6,5 +6,5 @@ export default {
     port: 3000,
 
     // Logging verbosity: false | 'error' | 'info' | true
-    debug: false,
+    debug: true,
 };

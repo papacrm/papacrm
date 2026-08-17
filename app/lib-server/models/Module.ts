@@ -65,7 +65,8 @@ export type ModuleNodeType =
     | "env"
     | "text"
     | "image"
-    | "selectInput";
+    | "selectInput"
+    | "consoleLog";
 
 export interface IModuleNode {
     id: string;
@@ -163,6 +164,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "text",
                 "image",
                 "selectInput",
+                "consoleLog",
             ],
         },
         x: { type: Number, required: true, default: 0 },
