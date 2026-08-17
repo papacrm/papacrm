@@ -3,7 +3,8 @@ import type { ModuleNodeDef } from "./types";
 const conditionNode: ModuleNodeDef = {
     type: "condition",
     label: "Condition",
-    description: "Branches the module based on a value. \"Pass data through\" controls whether the chosen branch's next node gets the current data as-is, or a clean empty object.",
+    description:
+        "Branches the module based on a value. \"Pass data through\" controls whether the chosen branch's next node gets the current data as-is, or a clean empty object. Wire in more than one node and set \"Multiple inputs\" to \"Wait\" in the inspector to check across all of them at once — they're combined into a single object first, so Field can just use e.g. \"status\", no need to reference a source node's id.",
     color: "#d97706",
     kind: "branch",
     fields: [

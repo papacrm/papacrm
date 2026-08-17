@@ -1,9 +1,9 @@
 import type { IModuleNode } from "../models/Module";
-import { nextEdgeTargets, readPath, type NodeContext, type NodeExecutor } from "./types";
+import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, uniqueIncomingSources, type NodeExecutor } from "./types";
 
-function evaluateCondition(node: IModuleNode, ctx: NodeContext): boolean {
+function evaluateCondition(node: IModuleNode, body: unknown, query: Record<string, string>): boolean {
     const { field = "", operator = "equals", value = "" } = node.data ?? {};
-    const haystack = readPath(ctx.body, field) ?? readPath(ctx.query, field);
+    const haystack = readPath(body, field) ?? readPath(query, field);
 
     switch (operator) {
         case "exists":
@@ -20,7 +20,23 @@ function evaluateCondition(node: IModuleNode, ctx: NodeContext): boolean {
 
 const conditionNode: NodeExecutor = {
     run({ node, ctx, edges }) {
-        const branch = evaluateCondition(node, ctx) ? "true" : "false";
+        // Same join-flattening Mapper uses (see flattenJoinBody's doc
+        // comment in ./types): when this node has 2+ inputs and "Multiple
+        // inputs" is set to Wait, ctx.body arrives namespaced by source
+        // node id. Flatten it — and, importantly, write the flattened
+        // version *back* onto ctx.body — so "Field" can just be e.g.
+        // "status" (no source node id needed), and so anything downstream
+        // (e.g. "Pass data through" handing this on to JSON/Mapper/etc.)
+        // sees the same flattened object rather than the raw namespaced
+        // one, which would otherwise still show up keyed by an
+        // unflattened node id like "n_xxxxx" in the final result.
+        const incomingSourceIds = uniqueIncomingSources(edges, node.id);
+        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
+        if (waitJoin) {
+            ctx.body = flattenJoinBody(ctx.body as Record<string, unknown>);
+        }
+
+        const branch = evaluateCondition(node, ctx.body, ctx.query) ? "true" : "false";
 
         // "Pass data through" (the default, and the only behavior before
         // this option existed) forwards whatever's currently on ctx.body —

@@ -1148,6 +1148,12 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                         <code className="font-mono">{"{{field}}"}</code>. If two inputs share a field name, whichever
                                                         one arrives last wins — there's no need to reference a source node's id.
                                                     </p>
+                                                ) : selectedNode.type === "condition" ? (
+                                                    <p className="text-xs text-neutral-500">
+                                                        Condition combines every input into a single object before checking it, so the Field box can
+                                                        just use e.g. <code className="font-mono">status</code>. If two inputs share a field name,
+                                                        whichever one arrives last wins — there's no need to reference a source node's id.
+                                                    </p>
                                                 ) : (
                                                     <>
                                                         <p className="text-xs text-neutral-500">
