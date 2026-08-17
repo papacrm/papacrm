@@ -132,8 +132,17 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
     const router = useRouter();
     const canvasRef = useRef<HTMLDivElement>(null);
     const nodesRef = useRef<ModuleNode[]>(module.nodes);
-    const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
+    // Anchor-based instead of a single offset: startPositions snapshots
+    // every selected node's x/y the moment the drag begins, so onMove
+    // below can apply the same delta (current canvas point minus
+    // startX/startY) to the whole group at once and keep them moving
+    // together, rigidly, regardless of which one is being dragged.
+    const dragRef = useRef<{ anchorId: string; startX: number; startY: number; startPositions: Map<string, { x: number; y: number }> } | null>(null);
     const connectRef = useRef<{ fromId: string; handle: string | null } | null>(null);
+    // Rubber-band/marquee selection — set on canvas-background mousedown,
+    // read by the window-level mousemove/mouseup below (see marqueeRect
+    // state, which is just this ref's live rectangle for rendering).
+    const marqueeRef = useRef<{ startX: number; startY: number; additive: boolean } | null>(null);
     const designerRef = useRef<HTMLDivElement>(null);
     const layoutDragRef = useRef<{
         viewId: string;
@@ -158,7 +167,14 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
     const [canvasSize, setCanvasSize] = useState({ width: INITIAL_CANVAS_WIDTH, height: INITIAL_CANVAS_HEIGHT });
     const canvasSizeRef = useRef(canvasSize);
     canvasSizeRef.current = canvasSize;
-    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    // The set of selected node ids — plain click replaces it with a
+    // single id, shift/cmd/ctrl-click toggles a node in or out of it, and
+    // dragging a rectangle across empty canvas (see marqueeRect) selects
+    // everything it touches. The Inspector shows the full per-field editor
+    // only when exactly one node is selected (selectedNode below); with
+    // zero or several it shows a lighter "N selected" summary instead.
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
     const [connectingLine, setConnectingLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -249,19 +265,33 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         function onMove(e: MouseEvent) {
             if (dragRef.current) {
                 const { x, y } = canvasPoint(e);
-                const { id, offsetX, offsetY } = dragRef.current;
+                const { startX, startY, startPositions } = dragRef.current;
+                const dx = x - startX;
+                const dy = y - startY;
                 setNodes((prev) =>
-                    prev.map((n) =>
-                        n.id === id
-                            ? {
-                                  ...n,
-                                  x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, x - offsetX)),
-                                  y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, y - offsetY)),
-                              }
-                            : n,
-                    ),
+                    prev.map((n) => {
+                        const start = startPositions.get(n.id);
+                        if (!start) return n;
+                        return {
+                            ...n,
+                            x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, start.x + dx)),
+                            y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, start.y + dy)),
+                        };
+                    }),
                 );
                 setDirty(true);
+                return;
+            }
+
+            if (marqueeRef.current) {
+                const { x, y } = canvasPoint(e);
+                const { startX, startY } = marqueeRef.current;
+                setMarqueeRect({
+                    x: Math.min(startX, x),
+                    y: Math.min(startY, y),
+                    width: Math.abs(x - startX),
+                    height: Math.abs(y - startY),
+                });
                 return;
             }
 
@@ -277,6 +307,31 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         function onUp(e: MouseEvent) {
             if (dragRef.current) {
                 dragRef.current = null;
+            }
+
+            if (marqueeRef.current) {
+                const { x, y } = canvasPoint(e);
+                const { startX, startY, additive } = marqueeRef.current;
+                const left = Math.min(startX, x);
+                const right = Math.max(startX, x);
+                const top = Math.min(startY, y);
+                const bottom = Math.max(startY, y);
+                // A marquee under ~4px is a click that barely moved, not a
+                // drag — selection was already cleared (or left alone, for
+                // an additive click) on mousedown, so there's nothing more
+                // to do here.
+                if (right - left > 4 || bottom - top > 4) {
+                    const touched = nodesRef.current.filter(
+                        (n) => n.x < right && n.x + NODE_WIDTH > left && n.y < bottom && n.y + NODE_HEIGHT > top,
+                    );
+                    setSelectedIds((prev) => {
+                        const next = additive ? new Set(prev) : new Set<string>();
+                        touched.forEach((n) => next.add(n.id));
+                        return next;
+                    });
+                }
+                marqueeRef.current = null;
+                setMarqueeRect(null);
             }
 
             if (connectRef.current) {
@@ -337,22 +392,22 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         };
     }, []);
 
-    // Delete/Backspace removes the selected node, as long as the person
-    // isn't typing in a field — otherwise Backspace while editing a text
-    // field would delete the node out from under them.
+    // Delete/Backspace removes every selected node (one or many), as long
+    // as the person isn't typing in a field — otherwise Backspace while
+    // editing a text field would delete the node(s) out from under them.
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
             if (e.key !== "Delete" && e.key !== "Backspace") return;
             const target = e.target as HTMLElement | null;
             const tag = target?.tagName;
             const isEditable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!target?.isContentEditable;
-            if (isEditable || !selectedNodeId) return;
+            if (isEditable || selectedIds.size === 0) return;
             e.preventDefault();
-            deleteNode(selectedNodeId);
+            deleteNodes(Array.from(selectedIds));
         }
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [selectedNodeId]);
+    }, [selectedIds]);
 
     // Drag-to-move and drag-to-resize for blocks inside the View layout
     // designer (see the "Layout" section of a selected View's inspector).
@@ -411,14 +466,57 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
 
     function handleNodeMouseDown(e: React.MouseEvent, node: ModuleNode) {
         e.stopPropagation();
-        setSelectedNodeId(node.id);
+        const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+        let nextSelected: Set<string>;
+        if (additive) {
+            nextSelected = new Set(selectedIds);
+            if (nextSelected.has(node.id)) nextSelected.delete(node.id);
+            else nextSelected.add(node.id);
+        } else if (selectedIds.has(node.id) && selectedIds.size > 1) {
+            // Pressing down on a node that's already part of a multi-select
+            // keeps the whole group selected, so the drag below (if any)
+            // carries every selected node along with it instead of
+            // collapsing the selection down to just this one.
+            nextSelected = selectedIds;
+        } else {
+            nextSelected = new Set([node.id]);
+        }
+        setSelectedIds(nextSelected);
         if (readOnly) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left + canvas.scrollLeft;
         const y = e.clientY - rect.top + canvas.scrollTop;
-        dragRef.current = { id: node.id, offsetX: x - node.x, offsetY: y - node.y };
+        const startPositions = new Map(
+            Array.from(nextSelected)
+                .map((id) => nodesRef.current.find((n) => n.id === id))
+                .filter((n): n is ModuleNode => !!n)
+                .map((n) => [n.id, { x: n.x, y: n.y }]),
+        );
+        dragRef.current = { anchorId: node.id, startX: x, startY: y, startPositions };
+    }
+
+    // Mousedown on empty canvas (nodes stop propagation, so this only
+    // fires for background clicks) starts a marquee selection. A plain
+    // click clears the current selection immediately, the same as
+    // before; a shift/cmd/ctrl-click leaves it alone so the marquee can
+    // add to it. Either way, onUp above turns the drag into a selection
+    // once it's grown past a few px.
+    function handleCanvasMouseDown(e: React.MouseEvent) {
+        if (readOnly) {
+            setSelectedIds(new Set());
+            return;
+        }
+        const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left + canvas.scrollLeft;
+            const y = e.clientY - rect.top + canvas.scrollTop;
+            marqueeRef.current = { startX: x, startY: y, additive };
+        }
+        if (!additive) setSelectedIds(new Set());
     }
 
     function handleOutputMouseDown(e: React.MouseEvent, node: ModuleNode, handle: string | null) {
@@ -463,16 +561,64 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
             data: def.defaultData(),
         };
         setNodes((prev) => [...prev, node]);
-        setSelectedNodeId(node.id);
+        setSelectedIds(new Set([node.id]));
+        setDirty(true);
+    }
+
+    // Removes one or more nodes at once — the per-node "×" button and the
+    // Inspector's "Delete node" button both call this with a single id;
+    // group delete (Delete/Backspace, or the Inspector's "Delete selected"
+    // button when several nodes are selected) calls it with the whole
+    // selection.
+    function deleteNodes(nodeIds: string[]) {
+        if (readOnly || nodeIds.length === 0) return;
+        const idSet = new Set(nodeIds);
+        setNodes((prev) => prev.filter((n) => !idSet.has(n.id)));
+        setEdges((prev) => prev.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)));
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            idSet.forEach((id) => next.delete(id));
+            return next;
+        });
         setDirty(true);
     }
 
     function deleteNode(nodeId: string) {
-        if (readOnly) return;
-        setNodes((prev) => prev.filter((n) => n.id !== nodeId));
-        setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
-        setSelectedNodeId((prev) => (prev === nodeId ? null : prev));
+        deleteNodes([nodeId]);
+    }
+
+    // Copies one or more nodes — same type and data, offset slightly so
+    // they don't land exactly on top of the originals — and selects the
+    // new copies. Any edge that runs between two nodes that are *both*
+    // being duplicated is copied along with them (so duplicating a
+    // connected group keeps it wired together); edges to anything outside
+    // the set are left behind, same as a single-node duplicate.
+    function duplicateNodes(nodeIds: string[]) {
+        if (readOnly || nodeIds.length === 0) return;
+        const idSet = new Set(nodeIds);
+        const sources = nodesRef.current.filter((n) => idSet.has(n.id));
+        if (sources.length === 0) return;
+
+        const idMap = new Map(sources.map((n) => [n.id, newId("n")]));
+        const copies: ModuleNode[] = sources.map((source) => ({
+            ...source,
+            id: idMap.get(source.id)!,
+            x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, source.x + 32)),
+            y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, source.y + 32)),
+            data: { ...source.data },
+        }));
+        const copiedEdges: ModuleEdge[] = edges
+            .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+            .map((e) => ({ ...e, id: newId("e"), source: idMap.get(e.source)!, target: idMap.get(e.target)! }));
+
+        setNodes((prev) => [...prev, ...copies]);
+        if (copiedEdges.length > 0) setEdges((prev) => [...prev, ...copiedEdges]);
+        setSelectedIds(new Set(copies.map((n) => n.id)));
         setDirty(true);
+    }
+
+    function duplicateNode(nodeId: string) {
+        duplicateNodes([nodeId]);
     }
 
     function updateNodeData(nodeId: string, key: string, value: string | boolean | Record<string, string>) {
@@ -590,7 +736,29 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         URL.revokeObjectURL(url);
     }
 
-    const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
+    // Same idea as handleExport, but scoped to only the selected nodes —
+    // and whatever edges run strictly between them, so re-importing the
+    // file doesn't produce edges pointing at nodes that didn't come
+    // along. Shows up next to Export as soon as anything is selected.
+    function handleExportSelected() {
+        const selNodes = nodes.filter((n) => selectedIds.has(n.id));
+        if (selNodes.length === 0) return;
+        const selNodeIds = new Set(selNodes.map((n) => n.id));
+        const selEdges = edges.filter((e) => selNodeIds.has(e.source) && selNodeIds.has(e.target));
+        const exportData = { nodes: selNodes, edges: selEdges };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const slug = (name.trim() || "module").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "module";
+        a.href = url;
+        a.download = `${slug}-selection.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    const selectedNode = selectedIds.size === 1 ? nodes.find((n) => selectedIds.has(n.id)) ?? null : null;
 
     const q = nodeQuery.trim().toLowerCase();
     const hasQuery = q.length > 0;
@@ -661,6 +829,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                     {error && <span className="text-sm text-destructive">{error}</span>}
                     {!error && saved && !dirty && <span className="text-sm text-neutral-400">Saved</span>}
                     {dirty && !saving && !readOnly && <span className="text-sm text-neutral-400">Unsaved changes</span>}
+                    {selectedIds.size > 0 && (
+                        <Button type="button" variant="outline" size="sm" onClick={handleExportSelected}>
+                            Export selected ({selectedIds.size})
+                        </Button>
+                    )}
                     <Button type="button" variant="outline" size="sm" onClick={handleExport}>
                         Export
                     </Button>
@@ -754,7 +927,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                 {/* Canvas */}
                 <div
                     ref={canvasRef}
-                    onMouseDown={() => setSelectedNodeId(null)}
+                    onMouseDown={handleCanvasMouseDown}
                     onScroll={handleCanvasScroll}
                     // min-w-0/min-h-0 matter here: without them, a flex
                     // item won't shrink below its content's natural size,
@@ -803,9 +976,16 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             )}
                         </svg>
 
+                        {marqueeRect && (
+                            <div
+                                className="pointer-events-none absolute rounded-sm border border-neutral-900/40 bg-neutral-900/10"
+                                style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.width, height: marqueeRect.height }}
+                            />
+                        )}
+
                         {nodes.map((node) => {
                             const def = NODE_DEFS[node.type];
-                            const isSelected = node.id === selectedNodeId;
+                            const isSelected = selectedIds.has(node.id);
                             return (
                                 <div
                                     key={node.id}
@@ -876,7 +1056,30 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                         selectedNode && WIDE_INSPECTOR_TYPES.includes(selectedNode.type) ? "w-[32rem]" : "w-72",
                     )}
                 >
-                    {!selectedNode ? (
+                    {selectedIds.size > 1 ? (
+                        // Several nodes selected at once (shift-click, or
+                        // a marquee drag across empty canvas) — no
+                        // per-field editor for a mixed set, just the
+                        // group actions. Dragging any one of the selected
+                        // nodes on the canvas moves all of them together.
+                        <div className="flex flex-col gap-4">
+                            <div>
+                                <p className="text-sm font-semibold text-neutral-900">{selectedIds.size} nodes selected</p>
+                                <p className="text-xs text-neutral-500">
+                                    Drag any of them to move the whole group. Shift-click a node to add or remove it from the
+                                    selection.
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => duplicateNodes(Array.from(selectedIds))}>
+                                    Duplicate selected
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => deleteNodes(Array.from(selectedIds))}>
+                                    Delete selected
+                                </Button>
+                            </div>
+                        </div>
+                    ) : !selectedNode ? (
                         <p className="text-sm text-neutral-400">
                             Select a node to edit it, or drag from the dot on its right edge to connect it to another node. Drag from the same dot again to
                             fan out to a second node — both run in parallel.
@@ -1702,9 +1905,14 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 );
                             })()}
 
-                            <Button type="button" variant="outline" size="sm" onClick={() => deleteNode(selectedNode.id)}>
-                                Delete node
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => duplicateNode(selectedNode.id)}>
+                                    Duplicate node
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={() => deleteNode(selectedNode.id)}>
+                                    Delete node
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </div>
