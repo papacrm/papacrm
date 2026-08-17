@@ -1016,6 +1016,26 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     );
                                 }
 
+                                // Random's Length/Min/Max/Custom characters fields only make
+                                // sense for their own mode — Number describes a numeric range
+                                // (Min/Max), the other three modes describe a string length
+                                // (Length), and Custom additionally needs its own character
+                                // pool. Hide whichever of these don't apply to the current mode
+                                // rather than showing every field at once.
+                                if (selectedNode.type === "random") {
+                                    const mode = selectedNode.data?.mode ?? "both";
+                                    if (field.key === "length" && mode === "number") return null;
+                                    if ((field.key === "min" || field.key === "max") && mode !== "number") return null;
+                                    if (field.key === "customChars" && mode !== "custom") return null;
+                                }
+
+                                // Condition's "Exists" operator only checks whether the field
+                                // has a value at all — there's nothing to compare it against,
+                                // so the Value box is just noise once that's selected.
+                                if (selectedNode.type === "condition" && field.key === "value" && selectedNode.data?.operator === "exists") {
+                                    return null;
+                                }
+
                                 // State's Mapping field only makes sense once something is
                                 // actually feeding this node data to map — with no incoming
                                 // edge there's nothing to pull {{field}} values from, so hide
@@ -1153,6 +1173,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                         Condition combines every input into a single object before checking it, so the Field box can
                                                         just use e.g. <code className="font-mono">status</code>. If two inputs share a field name,
                                                         whichever one arrives last wins — there's no need to reference a source node's id.
+                                                    </p>
+                                                ) : selectedNode.type === "add" ? (
+                                                    <p className="text-xs text-neutral-500">
+                                                        Add reads one number from each input — using "Field to sum" if set, otherwise each input's
+                                                        value itself — and adds them all together into one total. Non-numeric inputs just count as 0.
                                                     </p>
                                                 ) : (
                                                     <>

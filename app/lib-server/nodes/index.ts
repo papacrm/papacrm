@@ -56,6 +56,8 @@ import countNode from "./count";
 import distinctNode from "./distinct";
 import delayNode from "./delay";
 import randomNode from "./random";
+import nowNode from "./now";
+import addNode from "./add";
 import envNode from "./env";
 import textNode from "./text";
 import imageNode from "./image";
@@ -126,6 +128,8 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     distinct: distinctNode,
     delay: delayNode,
     random: randomNode,
+    now: nowNode,
+    add: addNode,
     env: envNode,
     text: textNode,
     image: imageNode,

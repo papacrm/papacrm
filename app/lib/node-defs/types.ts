@@ -60,6 +60,8 @@ export type ModuleNodeType =
     | "distinct"
     | "delay"
     | "random"
+    | "now"
+    | "add"
     | "env"
     | "text"
     | "image"

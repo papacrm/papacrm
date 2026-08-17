@@ -1,6 +1,33 @@
 import type { IModuleNode } from "../models/Module";
 import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, uniqueIncomingSources, type NodeExecutor } from "./types";
 
+function toNumberOrNaN(v: unknown): number {
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim() !== "") return Number(v);
+    return NaN;
+}
+
+// == / != are numeric-aware: "5" == 5 the way a low-code user expects,
+// falling back to a plain string compare when either side isn't numeric.
+function looseEquals(haystack: unknown, value: unknown): boolean {
+    const a = toNumberOrNaN(haystack);
+    const b = toNumberOrNaN(value);
+    if (!Number.isNaN(a) && !Number.isNaN(b)) return a === b;
+    return String(haystack ?? "") === String(value ?? "");
+}
+
+// === has no real notion of "type" for the Value box (it's always just
+// text), so it infers one: "true"/"false" becomes a boolean, a numeric
+// string becomes a number, anything else stays a string — then compares
+// with real strict equality against whatever type `haystack` actually is.
+// Unlike ==, a string "5" is NOT === the number 5.
+function parseTypedValue(raw: string): unknown {
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    if (raw.trim() !== "" && !Number.isNaN(Number(raw))) return Number(raw);
+    return raw;
+}
+
 function evaluateCondition(node: IModuleNode, body: unknown, query: Record<string, string>): boolean {
     const { field = "", operator = "equals", value = "" } = node.data ?? {};
     const haystack = readPath(body, field) ?? readPath(query, field);
@@ -8,13 +35,35 @@ function evaluateCondition(node: IModuleNode, body: unknown, query: Record<strin
     switch (operator) {
         case "exists":
             return haystack !== undefined && haystack !== null && haystack !== "";
+        case "gt": {
+            const a = toNumberOrNaN(haystack);
+            const b = toNumberOrNaN(value);
+            return !Number.isNaN(a) && !Number.isNaN(b) && a > b;
+        }
+        case "gte": {
+            const a = toNumberOrNaN(haystack);
+            const b = toNumberOrNaN(value);
+            return !Number.isNaN(a) && !Number.isNaN(b) && a >= b;
+        }
+        case "lt": {
+            const a = toNumberOrNaN(haystack);
+            const b = toNumberOrNaN(value);
+            return !Number.isNaN(a) && !Number.isNaN(b) && a < b;
+        }
+        case "lte": {
+            const a = toNumberOrNaN(haystack);
+            const b = toNumberOrNaN(value);
+            return !Number.isNaN(a) && !Number.isNaN(b) && a <= b;
+        }
+        case "strictEquals":
+            return haystack === parseTypedValue(String(value ?? ""));
         case "notEquals":
-            return String(haystack ?? "") !== String(value);
+            return !looseEquals(haystack, value);
         case "contains":
             return typeof haystack === "string" && haystack.includes(String(value));
         case "equals":
         default:
-            return String(haystack ?? "") === String(value);
+            return looseEquals(haystack, value);
     }
 }
 
