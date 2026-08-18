@@ -10,7 +10,7 @@ const listNode: NodeExecutor = {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
         if (!listId) {
-            ctx.body = { fields: [], documents: [] };
+            ctx.body = { listId: null, fields: [], documents: [] };
             return { done: false, nextNodeIds };
         }
 
@@ -18,14 +18,14 @@ const listNode: NodeExecutor = {
             await connectDB();
             const module = await Module.findById(ctx.moduleId).select("owner").lean();
             if (!module) {
-                ctx.body = { fields: [], documents: [] };
+                ctx.body = { listId: null, fields: [], documents: [] };
                 return { done: false, nextNodeIds };
             }
 
             // Fetch list and verify ownership
             const list = await List.findById(listId).lean();
             if (!list || String((list as any).owner) !== String((module as any).owner)) {
-                ctx.body = { fields: [], documents: [] };
+                ctx.body = { listId: null, fields: [], documents: [] };
                 return { done: false, nextNodeIds };
             }
 
@@ -35,6 +35,7 @@ const listNode: NodeExecutor = {
             const documents = await ListDocument.find({ list: listId, owner: (list as any).owner }).lean();
 
             ctx.body = {
+                listId: String(list._id),
                 fields,
                 documents: documents.map((doc: any) => ({
                     _id: String(doc._id),
@@ -44,7 +45,7 @@ const listNode: NodeExecutor = {
                 })),
             };
         } catch {
-            ctx.body = { fields: [], documents: [] };
+            ctx.body = { listId: null, fields: [], documents: [] };
         }
 
         return { done: false, nextNodeIds };

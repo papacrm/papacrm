@@ -10,9 +10,9 @@ import type { ModuleNodeDef } from "./types";
 const listUpsertNode: ModuleNodeDef = {
     type: "listUpsert",
     label: "List (create if not exists)",
-    description: "Finds a list by name, or creates it from a JSON schema if none exists yet — chain to Match, Project, Sort, Count, etc.",
+    description: "Finds a list by name, or creates it from a JSON schema if none exists yet — chain to Find One, Save to List, Match, etc. This node doesn't need input from the left.",
     color: "#6366f1",
-    kind: "action",
+    kind: "trigger",
     fields: [
         {
             key: "name",
@@ -31,7 +31,10 @@ const listUpsertNode: ModuleNodeDef = {
     summarize: (data) => (data?.name ? `List: ${data.name}` : "No name set"),
     inspectorNote: (data) =>
         data?.name
-            ? null
+            ? {
+                  label: "Tip",
+                  value: "This node doesn't require input from the left — it's a source node. Chain it to nodes like Find One, Save to List, Match, or other list-processing nodes.",
+              }
             : {
                   label: "Tip",
                   value: "Give it a name — plain text or a {{field}} template. Each field in the schema needs a key, label, and type (text, number, boolean, date, or select); add \"unique\": true to a field to stop two documents from ever sharing a value for it.",

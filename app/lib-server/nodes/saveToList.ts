@@ -3,6 +3,8 @@ import { sanitizeDocumentData } from "../listValidation";
 import { findUniqueFieldConflict } from "../listUnique";
 import { nextEdgeTargets, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
+import { connectDB } from "../mongoose";
+import List from "../models/List";
 
 // Shared by every "nothing was actually saved" branch below (no chained
 // list, an unresolvable one, or a write error) — same underscore-prefixed
@@ -13,41 +15,46 @@ function emptyResult() {
 }
 
 const saveToListNode: NodeExecutor = {
-    async run({ node, ctx, edges, nodes }) {
+    async run({ node, ctx, edges }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // No config of its own — the *object to save* is whatever's
-        // already on ctx.body when this node runs (the same "current
-        // data" every other node reads/writes), and the *target list* is
-        // whichever List or List (create if not exists) node is chained
-        // right after it. That's the reverse of where the list used to
-        // come from: this node used to expect the List/List-upsert node
-        // to run first and leave a listId behind on ctx.body, which meant
-        // by the time Save to List ran, the object it was supposed to
-        // save had already been overwritten by that list node's own
-        // fields/documents output. Looking forward instead means the
-        // object a person actually wants saved — from an Input Form,
-        // Mapper, HTTP Request, etc. — is still intact on ctx.body right
-        // here.
-        const data = ctx.body ?? {};
-        const targetNode = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).find((n) => n && (n.type === "list" || n.type === "listUpsert"));
+        // Expects input from previous node with shape: { listId, fields, documents, ... }
+        // The listId and fields come from a List or ListUpsert node chained to the left
+        const listId = String((ctx.body as any)?.listId ?? "").trim();
+        const fields = (ctx.body as any)?.fields ?? [];
 
-        // A side effect that also produces its own output — same
-        // "skip quietly rather than fail the whole run" spirit as Save to
-        // Database: no chained list, a not-yet-configured List node, an
-        // empty List (create if not exists) name, or a resolution error
-        // all just mean there's nowhere to save, reflected in the output
-        // as `_saved: false` instead of failing the run.
-        if (!targetNode) {
+        // Extract the fields to save (everything except listId, documents, fields)
+        const data: Record<string, any> = {};
+        if (ctx.body && typeof ctx.body === "object") {
+            for (const [key, value] of Object.entries(ctx.body)) {
+                if (!["listId", "fields", "documents"].includes(key)) {
+                    data[key] = value;
+                }
+            }
+        }
+
+        // No list provided or no fields configured
+        if (!listId || !fields.length) {
             ctx.body = emptyResult();
             return { done: false, nextNodeIds };
         }
 
-        const resolved = await resolveListTarget(targetNode, ctx).catch(() => null);
-        if (!resolved) {
+        // Resolve the owner from the list
+        let owner: any;
+        try {
+            await connectDB();
+            const list = await List.findById(listId).select("owner").lean();
+            if (!list) {
+                ctx.body = emptyResult();
+                return { done: false, nextNodeIds };
+            }
+            owner = (list as any).owner;
+        } catch {
             ctx.body = emptyResult();
             return { done: false, nextNodeIds };
         }
+
+        const resolved = { listId, fields, owner };
 
         try {
             const sanitized = sanitizeDocumentData(resolved.fields, data);

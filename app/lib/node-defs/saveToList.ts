@@ -1,25 +1,19 @@
 import type { ModuleNodeDef } from "./types";
 
-// No config of its own — it saves whatever the *current data* already is
-// (whatever an earlier node like Input Form, Mapper, or HTTP Request left
-// on it) into whichever list a List (lib/node-defs/list.ts) or List
-// (create if not exists) (lib/node-defs/listUpsert.ts) node chained right
-// *after* this one resolves to. See lib-server/nodes/saveToList.ts (and
-// lib-server/nodes/listResolve.ts, which it shares with List (create if
-// not exists)) for the save logic.
+// Accepts list data from input (from a List or List (create if not exists) node on the left).
+// Saves the input's data fields as a new document in that list, excluding listId/fields/documents.
 const saveToListNode: ModuleNodeDef = {
     type: "saveToList",
     label: "Save to List",
-    description:
-        "Stores the current data as a new entry in whichever list the next node (a List or List (create if not exists) node) resolves to, and passes the saved document (with its _id) on as the output",
+    description: "Saves the data from the input (except listId/fields/documents) as a new entry in the list provided by a List or List (create if not exists) node chained to the left",
     color: "#0d9488",
     kind: "action",
     fields: [],
     defaultData: () => ({}),
-    summarize: () => "Saves to the next list",
+    summarize: () => "Saves to list from input",
     inspectorNote: () => ({
         label: "Tip",
-        value: "Chain this right before a List or List (create if not exists) node — that's what tells it which list to save into.",
+        value: "Chain a List or List (create if not exists) node to the left of this one — the list it provides is where your data will be saved.",
     }),
 };
 

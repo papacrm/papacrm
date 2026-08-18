@@ -1,31 +1,51 @@
 import { findOwnedListByName, findOneDocument } from "./listData";
 import { nextEdgeTargets, renderTemplate, type NodeExecutor } from "./types";
+import { connectDB } from "../mongoose";
+import List from "../models/List";
+import Module from "../models/Module";
 
 const findOneNode: NodeExecutor = {
     async run({ node, ctx, edges }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // {{field}} templating lets the list name or filter value come from
-        // an earlier node (e.g. an Input Form field) instead of always
-        // being hard-coded in the node — same as Query.
-        const listName = renderTemplate(String(node.data?.listName ?? ""), ctx).trim();
+        // Accepts list from input (listId from a List/ListUpsert node chained to the left)
+        // Falls back to listName config if no listId in input (legacy support)
+        let list: any = null;
+        let listId = String((ctx.body as any)?.listId ?? "").trim();
+
+        if (listId) {
+            // Accept list from input
+            try {
+                await connectDB();
+                const module = await Module.findById(ctx.moduleId).select("owner").lean();
+                if (!module) {
+                    list = null;
+                } else {
+                    list = await List.findById(listId).lean();
+                    // Verify ownership
+                    if (list && String((list as any).owner) !== String((module as any).owner)) {
+                        list = null;
+                    }
+                }
+            } catch {
+                list = null;
+            }
+        } else {
+            // Legacy: listName from config, templated from ctx
+            const listName = renderTemplate(String(node.data?.listName ?? ""), ctx).trim();
+            if (listName) {
+                list = await findOwnedListByName(listName, ctx.moduleId);
+            }
+        }
+
         const whereField = String(node.data?.whereField ?? "").trim();
         const whereOperator = String(node.data?.whereOperator ?? "equals");
         const whereValue = renderTemplate(String(node.data?.whereValue ?? ""), ctx);
 
         let found: { _id: string; data: Record<string, any> } | undefined;
 
-        if (listName) {
-            const list = await findOwnedListByName(listName, ctx.moduleId);
-            if (list) {
-                // A real findOne() — the where filter runs inside Mongo
-                // itself via ListDocument.findOne(...).lean(), rather than
-                // fetching every document in the list and filtering with
-                // Array.find in JS like this node used to. Field selection
-                // (which properties come back) is Project's job — chain
-                // one after this node to trim the result down.
-                found = await findOneDocument(list, whereField, whereOperator, whereValue);
-            }
+        if (list) {
+            found = await findOneDocument(list, whereField, whereOperator, whereValue);
         }
 
         // Unlike Query — which hands the next node a { fields, documents }
