@@ -10,9 +10,9 @@ import type { ModuleNodeDef } from "./types";
 const listUpsertNode: ModuleNodeDef = {
     type: "listUpsert",
     label: "List (create if not exists)",
-    description: "Finds a list by name, or creates it from a JSON schema if none exists yet — chain to Find One, Save to List, Match, etc. This node doesn't need input from the left.",
+    description: "Finds a list by name (or creates it from a JSON schema if none exists yet), then provides its metadata — chain to Find, Find One, or Save to List to work with the list's documents. Can accept input from the left to pass through.",
     color: "#6366f1",
-    kind: "trigger",
+    kind: "action",
     fields: [
         {
             key: "name",
@@ -33,7 +33,7 @@ const listUpsertNode: ModuleNodeDef = {
         data?.name
             ? {
                   label: "Tip",
-                  value: "This node doesn't require input from the left — it's a source node. Chain it to nodes like Find One, Save to List, Match, or other list-processing nodes.",
+                  value: "This node provides list metadata to the next node — chain it to Find, Find One, or Save to List to work with the list's documents.",
               }
             : {
                   label: "Tip",

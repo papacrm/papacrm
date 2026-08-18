@@ -3,8 +3,7 @@ import { sanitizeDocumentData } from "../listValidation";
 import { findUniqueFieldConflict } from "../listUnique";
 import { nextEdgeTargets, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
-import { connectDB } from "../mongoose";
-import List from "../models/List";
+import type { IModuleNode } from "../models/Module";
 
 // Shared by every "nothing was actually saved" branch below (no chained
 // list, an unresolvable one, or a write error) — same underscore-prefixed
@@ -15,46 +14,113 @@ function emptyResult() {
 }
 
 const saveToListNode: NodeExecutor = {
-    async run({ node, ctx, edges }) {
+    async run({ node, ctx, edges, nodes }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // Expects input from previous node with shape: { listId, fields, documents, ... }
-        // The listId and fields come from a List or ListUpsert node chained to the left
-        const listId = String((ctx.body as any)?.listId ?? "").trim();
-        const fields = (ctx.body as any)?.fields ?? [];
+        let resolved = null;
+        let data: Record<string, any> = {};
 
-        // Extract the fields to save (everything except listId, documents, fields)
-        const data: Record<string, any> = {};
-        if (ctx.body && typeof ctx.body === "object") {
-            for (const [key, value] of Object.entries(ctx.body)) {
-                if (!["listId", "fields", "documents"].includes(key)) {
-                    data[key] = value;
+        // Check if ctx.body is namespaced (joinMode: "wait" with multiple inputs)
+        const isNamespaced = ctx.body && typeof ctx.body === "object" &&
+            Object.values(ctx.body).some((v: any) => v && typeof v === "object" && "__node" in v);
+
+        if (isNamespaced) {
+            // Extract from namespaced inputs
+            let listNamespace: any = null;
+
+            for (const [key, value] of Object.entries(ctx.body as any)) {
+                if (value && typeof value === "object") {
+                    // Check if this namespace has list metadata
+                    if (value.listId && value.fields) {
+                        listNamespace = value;
+                    } else {
+                        // Merge non-list data
+                        for (const [dataKey, dataValue] of Object.entries(value)) {
+                            if (dataKey !== "__node") {
+                                data[dataKey] = dataValue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (listNamespace && listNamespace.listId && listNamespace.fields) {
+                const listId = String(listNamespace.listId);
+                const fields = listNamespace.fields;
+
+                // Get owner from the list
+                try {
+                    const { connectDB } = await import("../mongoose");
+                    const List = (await import("../models/List")).default;
+                    await connectDB();
+                    const list = await List.findById(listId).select("owner").lean();
+                    if (list) {
+                        resolved = { listId, fields, owner: (list as any).owner };
+                    }
+                } catch {
+                    // Error getting list
+                }
+            }
+        } else {
+            // Non-namespaced - check if list metadata is in the input directly
+            const listId = String((ctx.body as any)?.listId ?? "").trim();
+            const fields = (ctx.body as any)?.fields ?? [];
+
+            if (listId && fields.length > 0) {
+            // List metadata is in the input - extract it and get the data fields
+            resolved = { listId, fields, owner: null as any };
+
+            // Get owner from the list
+            try {
+                const { connectDB } = await import("../mongoose");
+                const List = (await import("../models/List")).default;
+                await connectDB();
+                const list = await List.findById(listId).select("owner").lean();
+                if (list) {
+                    resolved.owner = (list as any).owner;
+
+                    // Extract data to save: everything except list metadata
+                    if (ctx.body && typeof ctx.body === "object") {
+                        for (const [key, value] of Object.entries(ctx.body)) {
+                            if (
+                                !["listId", "fields", "documents", "name", "created"].includes(key) &&
+                                !key.startsWith("_") &&
+                                !["createdAt", "updatedAt"].includes(key)
+                            ) {
+                                data[key] = value;
+                            }
+                        }
+                    }
+                } else {
+                    resolved = null;
+                }
+            } catch {
+                resolved = null;
+            }
+            } else {
+                // No list metadata in input - try forward lookup
+                const nextNodes = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is IModuleNode => Boolean(n));
+                const targetNode = nextNodes.find((n) => n.type === "list" || n.type === "listUpsert");
+
+                if (targetNode) {
+                    resolved = await resolveListTarget(targetNode, ctx).catch(() => null);
+                    if (resolved && ctx.body && typeof ctx.body === "object" && !Array.isArray(ctx.body)) {
+                        Object.assign(data, ctx.body);
+                    }
                 }
             }
         }
 
-        // No list provided or no fields configured
-        if (!listId || !fields.length) {
+        if (!resolved) {
             ctx.body = emptyResult();
             return { done: false, nextNodeIds };
         }
 
-        // Resolve the owner from the list
-        let owner: any;
-        try {
-            await connectDB();
-            const list = await List.findById(listId).select("owner").lean();
-            if (!list) {
-                ctx.body = emptyResult();
-                return { done: false, nextNodeIds };
-            }
-            owner = (list as any).owner;
-        } catch {
+        // If no data to save after filtering, skip quietly
+        if (Object.keys(data).length === 0) {
             ctx.body = emptyResult();
             return { done: false, nextNodeIds };
         }
-
-        const resolved = { listId, fields, owner };
 
         try {
             const sanitized = sanitizeDocumentData(resolved.fields, data);

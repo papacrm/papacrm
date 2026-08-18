@@ -1,4 +1,4 @@
-import { findOwnedListByName, findOneDocument } from "./listData";
+import { findOneDocument } from "./listData";
 import { nextEdgeTargets, renderTemplate, type NodeExecutor } from "./types";
 import { connectDB } from "../mongoose";
 import List from "../models/List";
@@ -9,12 +9,10 @@ const findOneNode: NodeExecutor = {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
         // Accepts list from input (listId from a List/ListUpsert node chained to the left)
-        // Falls back to listName config if no listId in input (legacy support)
         let list: any = null;
-        let listId = String((ctx.body as any)?.listId ?? "").trim();
+        const listId = String((ctx.body as any)?.listId ?? "").trim();
 
         if (listId) {
-            // Accept list from input
             try {
                 await connectDB();
                 const module = await Module.findById(ctx.moduleId).select("owner").lean();
@@ -29,12 +27,6 @@ const findOneNode: NodeExecutor = {
                 }
             } catch {
                 list = null;
-            }
-        } else {
-            // Legacy: listName from config, templated from ctx
-            const listName = renderTemplate(String(node.data?.listName ?? ""), ctx).trim();
-            if (listName) {
-                list = await findOwnedListByName(listName, ctx.moduleId);
             }
         }
 

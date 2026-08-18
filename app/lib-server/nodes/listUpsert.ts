@@ -1,6 +1,5 @@
 import { connectDB } from "../mongoose";
 import List from "../models/List";
-import ListDocument from "../models/ListDocument";
 import Module from "../models/Module";
 import { sanitizeFields } from "../listValidation";
 import { nextEdgeTargets, renderTemplate, type NodeExecutor } from "./types";
@@ -11,12 +10,22 @@ const MAX_NAME_LENGTH = 120;
 // module/owner missing, or an unexpected DB error) — same "skip quietly,
 // don't fail the run" spirit as Save to List/Save to Database.
 function emptyResult() {
-    return { listId: "", name: "", created: false, fields: [], documents: [] };
+    return { listId: "", name: "", created: false, fields: [] };
 }
 
 const listUpsertNode: NodeExecutor = {
     async run({ node, ctx, edges }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
+
+        // Check if this node has input (used after Save to List for forward lookup)
+        const hasInput = edges.some((e) => e.target === node.id);
+
+        if (hasInput && ctx.body !== null && ctx.body !== undefined) {
+            // Pass through mode: when used after Save to List, don't replace the output
+            return { done: false, nextNodeIds };
+        }
+
+        // Trigger mode: provide list metadata
         const name = renderTemplate(String(node.data?.name ?? ""), ctx).trim().slice(0, MAX_NAME_LENGTH);
 
         if (!name) {
@@ -56,19 +65,12 @@ const listUpsertNode: NodeExecutor = {
             }
 
             const fields = ((listDoc as any).fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type, unique: f.unique ?? undefined }));
-            const documents = await ListDocument.find({ list: (listDoc as any)._id, owner }).lean();
 
             ctx.body = {
                 listId: String((listDoc as any)._id),
                 name: (listDoc as any).name as string,
                 created,
                 fields,
-                documents: documents.map((doc: any) => ({
-                    _id: String(doc._id),
-                    data: doc.data ?? {},
-                    createdAt: doc.createdAt,
-                    updatedAt: doc.updatedAt,
-                })),
             };
         } catch {
             ctx.body = emptyResult();

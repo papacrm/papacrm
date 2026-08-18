@@ -151,16 +151,32 @@ export default function WebhookInputForm({ fields, submitLabel, nodeId }: Webhoo
     })
       .then(function (res) {
         if (!res.ok) throw new Error("Request failed: " + res.status);
+        // Check if response is JSON (Content-Type header)
+        var contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          // JSON response - submission succeeded, don't try to swap page
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitBtn.dataset.originalText || "Submit";
+          if (summary) summary.textContent = "Submitted successfully!";
+          return null; // Signal success without page swap
+        }
         return res.text();
       })
       .then(function (html) {
+        if (html === null) return; // JSON response, already handled
         if (!swapInPage(html)) throw new Error("Unrecognized response");
       })
-      .catch(function () {
-        // Fall back to a real navigation so the module still completes
-        // even if the in-place swap couldn't be done (e.g. very old
-        // browser, or the response wasn't a page NukeJS rendered).
-        HTMLFormElement.prototype.submit.call(form);
+      .catch(function (err) {
+        // Only fall back to real navigation if it's NOT a JSON response
+        // (JSON responses don't need page swap)
+        if (err && err.message && err.message.includes("Unrecognized response")) {
+          HTMLFormElement.prototype.submit.call(form);
+        } else {
+          // Network error or other issue - show error
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitBtn.dataset.originalText || "Submit";
+          if (summary) summary.textContent = "Submission failed. Please try again.";
+        }
       });
   });
 })();

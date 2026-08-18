@@ -1377,6 +1377,10 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                         just use e.g. <code className="font-mono">status</code>. If two inputs share a field name,
                                                         whichever one arrives last wins — there's no need to reference a source node's id.
                                                     </p>
+                                                ) : selectedNode.type === "saveToList" ? (
+                                                    <p className="text-xs text-neutral-500">
+                                                        Save to List combines every input into a single object. It extracts list metadata (listId, fields) from one input and data fields from all inputs, then saves the data to the list. Typically: connect a List node and a Form/Mapper node, both feeding into Save to List with wait mode.
+                                                    </p>
                                                 ) : (
                                                     <>
                                                         <p className="text-xs text-neutral-500">

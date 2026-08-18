@@ -3,11 +3,10 @@ import type { ModuleNodeDef } from "./types";
 const findOneNode: ModuleNodeDef = {
     type: "findOne",
     label: "Find One",
-    description: "Looks up a single record from a list with a simple filter — accepts a list from input or uses a configured list name",
+    description: "Looks up a single record from a list with a simple filter — accepts list from input (chain a List or List (create if not exists) node to the left)",
     color: "#0369a1",
     kind: "action",
     fields: [
-        { key: "listName", label: "List name (optional — or use list from input)", kind: "text", placeholder: "Customers" },
         { key: "whereField", label: "Where field (optional)", kind: "text", placeholder: "email" },
         {
             key: "whereOperator",
@@ -30,19 +29,16 @@ const findOneNode: ModuleNodeDef = {
             ],
         },
     ],
-    defaultData: () => ({ listName: "", whereField: "", whereOperator: "equals", whereValue: "", mode: "replace" }),
+    defaultData: () => ({ whereField: "", whereOperator: "equals", whereValue: "", mode: "replace" }),
     summarize: (data) => {
-        const hasListName = data?.listName?.trim();
-        return hasListName
-            ? data?.whereField
-                ? `First of ${data.listName} where ${data.whereField} ${data.whereOperator ?? "equals"} ${data.whereValue ?? ""}`
-                : `First of ${data.listName}`
-            : "From input list";
+        return data?.whereField
+            ? `First where ${data.whereField} ${data.whereOperator ?? "equals"} ${data.whereValue ?? ""}`
+            : "First document from input list";
     },
     inspectorNote: () => ({
         label: "Tip",
         value:
-            "Chain a List or List (create if not exists) node to the left, or set a list name above. Passes the found record's own fields to the next node, so {{field}} reads them the same way a submitted form's fields would. No match: in Replace mode the next node gets null; in Merge mode whatever was already there passes through untouched.",
+            "Chain a List or List (create if not exists) node to the left. Passes the found record's own fields to the next node, so {{field}} reads them the same way a submitted form's fields would. No match: in Replace mode the next node gets null; in Merge mode whatever was already there passes through untouched.",
     }),
 };
 

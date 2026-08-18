@@ -7,7 +7,9 @@ import { nextEdgeTargets, type NodeExecutor } from "./types";
 const findNode: NodeExecutor = {
     async run({ node, ctx, edges }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
-        const listId = String(node.data?.list ?? "");
+
+        // Accept list from input (listId from a List/ListUpsert node chained to the left)
+        const listId = String((ctx.body as any)?.listId ?? "").trim();
 
         if (!listId) {
             ctx.body = { fields: [], documents: [] };
