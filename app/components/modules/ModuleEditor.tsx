@@ -1095,11 +1095,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 // The field-selection checkboxes live only on Project —
                                 // it reads the list schema off whichever data node feeds
                                 // it, walking back through any pass-through pipeline
-                                // nodes (Match/Sort/Limit/Skip) in between to find the
-                                // actual source: Find/List (by id) or Find One/Query
-                                // (by name-match against your Lists).
+                                // nodes (Match/Sort/Limit/Skip/Pass data through) in
+                                // between to find the actual source: Find/List (by id)
+                                // or Find One/Query (by name-match against your Lists).
                                 if (field.kind === "select" && field.dynamicOptions === "findFields" && selectedNode.type === "project") {
-                                    const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip"];
+                                    const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip", "passThrough"];
                                     const ID_SOURCE_TYPES: ModuleNodeType[] = ["find", "list"];
                                     const NAME_SOURCE_TYPES: ModuleNodeType[] = ["findOne", "query"];
 

@@ -12,6 +12,7 @@ export type ModuleNodeType =
     | "saveRecord"
     | "saveToList"
     | "updateOne"
+    | "update"
     | "mapper"
     | "function"
     | "call"
@@ -66,7 +67,8 @@ export type ModuleNodeType =
     | "text"
     | "image"
     | "selectInput"
-    | "consoleLog";
+    | "consoleLog"
+    | "passThrough";
 
 // Groups nodes in the editor's palette (see ModuleEditor.tsx). Purely a
 // UI grouping — has no effect on execution. To add a new category, add it

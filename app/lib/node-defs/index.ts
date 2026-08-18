@@ -7,6 +7,7 @@ import staticPageNode from "./staticPage";
 import saveRecordNode from "./saveRecord";
 import saveToListNode from "./saveToList";
 import updateOneNode from "./updateOne";
+import updateNode from "./update";
 import mapperNode from "./mapper";
 import functionNode from "./function";
 import callNode from "./call";
@@ -62,6 +63,7 @@ import textNode from "./text";
 import imageNode from "./image";
 import selectInputNode from "./selectInput";
 import consoleLogNode from "./consoleLog";
+import passThroughNode from "./passThrough";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib/node-defs/<name>.ts` exporting a ModuleNodeDef (copy an
@@ -81,6 +83,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     saveRecord: saveRecordNode,
     saveToList: saveToListNode,
     updateOne: updateOneNode,
+    update: updateNode,
     mapper: mapperNode,
     function: functionNode,
     call: callNode,
@@ -136,6 +139,7 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     image: imageNode,
     selectInput: selectInputNode,
     consoleLog: consoleLogNode,
+    passThrough: passThroughNode,
 };
 
 export const NODE_ORDER: ModuleNodeType[] = [
@@ -150,6 +154,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "findOne",
     "condition",
     "mapper",
+    "passThrough",
     "staticPage",
     "json",
     "text",
@@ -180,6 +185,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "saveRecord",
     "saveToList",
     "updateOne",
+    "update",
     "getHeader",
     "setHeader",
     "getCookie",
@@ -241,9 +247,11 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     saveRecord: "data",
     saveToList: "data",
     updateOne: "data",
+    update: "data",
 
     condition: "logic",
     mapper: "logic",
+    passThrough: "logic",
     call: "logic",
     route: "logic",
     forward: "logic",

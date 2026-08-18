@@ -8,6 +8,7 @@ import staticPageNode from "./staticPage";
 import saveRecordNode from "./saveRecord";
 import saveToListNode from "./saveToList";
 import updateOneNode from "./updateOne";
+import updateNode from "./update";
 import mapperNode from "./mapper";
 import functionNode from "./function";
 import callNode from "./call";
@@ -63,6 +64,7 @@ import textNode from "./text";
 import imageNode from "./image";
 import selectInputNode from "./selectInput";
 import consoleLogNode from "./consoleLog";
+import passThroughNode from "./passThrough";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib-server/nodes/<name>.ts` exporting a NodeExecutor (copy an
@@ -81,6 +83,7 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     saveRecord: saveRecordNode,
     saveToList: saveToListNode,
     updateOne: updateOneNode,
+    update: updateNode,
     mapper: mapperNode,
     function: functionNode,
     call: callNode,
@@ -136,6 +139,7 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     image: imageNode,
     selectInput: selectInputNode,
     consoleLog: consoleLogNode,
+    passThrough: passThroughNode,
 };
 
 export * from "./types";

@@ -1,4 +1,5 @@
 import ListDocument from "../models/ListDocument";
+import type { IModuleNode } from "../models/Module";
 import { sanitizeDocumentData } from "../listValidation";
 import { findUniqueFieldConflict } from "../listUnique";
 import { nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
@@ -11,8 +12,8 @@ function parseJsonObject(raw: unknown): Record<string, unknown> {
         const parsed = JSON.parse(String(raw ?? "{}"));
         return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
     } catch {
-        // Malformed JSON in Match/Update — same "don't fail the run over
-        // a typo" spirit as Mapper's own JSON field.
+        // Malformed JSON on the Match/Update node — same "don't fail the
+        // run over a typo" spirit as Mapper's own JSON field.
         return {};
     }
 }
@@ -39,18 +40,27 @@ const updateOneNode: NodeExecutor = {
     async run({ node, ctx, edges, nodes }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
+        // Match, Update, and the target List/List (create if not exists)
+        // are all read straight off whichever nodes are chained right
+        // after this one — same as resolveListTarget below reads a List
+        // node's own data without running its full ctx.body-replacing
+        // logic. Match and Update nodes work the same way here: their
+        // `data.query`/`data.update` are read directly rather than
+        // executing them for real, so they can sit in the chain purely
+        // to configure this node.
+        const nextNodes = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is IModuleNode => Boolean(n));
+        const matchNode = nextNodes.find((n) => n.type === "match");
+        const updateNode = nextNodes.find((n) => n.type === "update");
+        const targetNode = nextNodes.find((n) => n.type === "list" || n.type === "listUpsert");
+
         // Same {{field}}/{{sourceNodeId.field}} templating as everywhere
         // else, applied recursively so both Match and Update can pull
         // values out of whatever's on ctx.body (an earlier Input Form,
         // Mapper, HTTP Request, ...) — not just hard-coded literals.
-        const match = renderTemplateDeep(parseJsonObject(node.data?.match), ctx) as Record<string, unknown>;
-        const update = renderTemplateDeep(parseJsonObject(node.data?.update), ctx) as Record<string, unknown>;
+        const match = renderTemplateDeep(parseJsonObject(matchNode?.data?.query), ctx) as Record<string, unknown>;
+        const update = renderTemplateDeep(parseJsonObject(updateNode?.data?.update), ctx) as Record<string, unknown>;
         const upsert = node.data?.upsert === true;
 
-        // Same forward-chaining as Save to List: the list to update is
-        // whichever List / List (create if not exists) node comes right
-        // after this one, not something configured on this node itself.
-        const targetNode = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).find((n) => n && (n.type === "list" || n.type === "listUpsert"));
         if (!targetNode) {
             ctx.body = emptyResult();
             return { done: false, nextNodeIds };

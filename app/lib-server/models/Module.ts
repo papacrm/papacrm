@@ -12,6 +12,7 @@ export type ModuleNodeType =
     | "saveRecord"
     | "saveToList"
     | "updateOne"
+    | "update"
     | "mapper"
     | "function"
     | "call"
