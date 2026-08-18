@@ -1,64 +1,117 @@
-import { findOneDocument } from "./listData";
-import { nextEdgeTargets, renderTemplate, type NodeExecutor } from "./types";
 import { connectDB } from "../mongoose";
 import List from "../models/List";
 import Module from "../models/Module";
+import { findOneDocument } from "./listData";
+import { nextEdgeTargets, type NodeExecutor } from "./types";
 
 const findOneNode: NodeExecutor = {
-    async run({ node, ctx, edges }) {
+    async run({ node, ctx, edges, nodes }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // Accepts list from input (listId from a List/ListUpsert node chained to the left)
-        let list: any = null;
-        const listId = String((ctx.body as any)?.listId ?? "").trim();
+        // Accept two input formats:
+        // 1. Array from Find/Match nodes - take first document
+        if (Array.isArray(ctx.body)) {
+            const firstDoc = ctx.body.length > 0 ? ctx.body[0] : null;
 
-        if (listId) {
-            try {
-                await connectDB();
-                const module = await Module.findById(ctx.moduleId).select("owner").lean();
-                if (!module) {
-                    list = null;
-                } else {
-                    list = await List.findById(listId).lean();
-                    // Verify ownership
-                    if (list && String((list as any).owner) !== String((module as any).owner)) {
-                        list = null;
-                    }
-                }
-            } catch {
-                list = null;
+            if (!firstDoc) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
             }
-        }
 
-        const whereField = String(node.data?.whereField ?? "").trim();
-        const whereOperator = String(node.data?.whereOperator ?? "equals");
-        const whereValue = renderTemplate(String(node.data?.whereValue ?? ""), ctx);
-
-        let found: { _id: string; data: Record<string, any> } | undefined;
-
-        if (list) {
-            found = await findOneDocument(list, whereField, whereOperator, whereValue);
-        }
-
-        // Unlike Query — which hands the next node a { fields, documents }
-        // shape for Table to render — Find One hands the next node the
-        // matching record's own fields directly, so {{field}} reads them
-        // the same way it reads a submitted form's fields. `_id` is
-        // underscore-prefixed so it doesn't collide with a real field of
-        // the same name.
-        if (!found) {
-            // No match: Merge mode has nothing to merge in, so leave
-            // whatever was already on ctx.body untouched. Replace mode (the
-            // default) has nothing to replace it with, so ctx.body becomes
-            // null — chain a Condition node checking `{{_id}}` exists (or
-            // just testing truthiness of the body) to branch on a miss.
-            if (node.data?.mode !== "merge") ctx.body = null;
+            // Already flattened by Find node
+            ctx.body = firstDoc;
             return { done: false, nextNodeIds };
         }
 
-        const record = { ...found.data, _id: found._id };
-        const existing = ctx.body && typeof ctx.body === "object" ? ctx.body : {};
-        ctx.body = node.data?.mode === "merge" ? { ...existing, ...record } : record;
+        // 2. { listId } from List/ListUpsert nodes - fetch first document from database
+        const listId = String((ctx.body as any)?.listId ?? "").trim();
+
+        if (!listId) {
+            ctx.body = null;
+            return { done: false, nextNodeIds };
+        }
+
+        try {
+            await connectDB();
+            const module = await Module.findById(ctx.moduleId).select("owner").lean();
+            if (!module) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
+            }
+
+            const list = await List.findById(listId).lean();
+            if (!list || String((list as any).owner) !== String((module as any).owner)) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
+            }
+
+            // Smart filtering: detect Match node either before or after Find One
+            // and apply its query at DB level.
+            let whereField = "";
+            let whereOperator = "equals";
+            let whereValue = "";
+
+            // Check if Match is chained BEFORE Find One (List → Match → FindOne)
+            const incomingEdges = edges.filter((e) => e.target === node.id);
+            if (incomingEdges.length === 1) {
+                const prevNode = nodes.find((n) => n.id === incomingEdges[0].source);
+                if (prevNode?.type === "match") {
+                    const query = (() => {
+                        try {
+                            return JSON.parse(String(prevNode.data?.query ?? "{}"));
+                        } catch {
+                            return {};
+                        }
+                    })();
+
+                    const entries = Object.entries(query);
+                    if (entries.length === 1) {
+                        const [key, value] = entries[0];
+                        whereField = key;
+                        whereOperator = "equals";
+                        whereValue = String(value);
+                    }
+                }
+            }
+
+            // If not found before, check if Match is chained AFTER Find One (FindOne → Match)
+            if (!whereField && nextNodeIds.length === 1) {
+                const nextNode = nodes.find((n) => n.id === nextNodeIds[0]);
+                if (nextNode?.type === "match") {
+                    const query = (() => {
+                        try {
+                            return JSON.parse(String(nextNode.data?.query ?? "{}"));
+                        } catch {
+                            return {};
+                        }
+                    })();
+
+                    const entries = Object.entries(query);
+                    if (entries.length === 1) {
+                        const [key, value] = entries[0];
+                        whereField = key;
+                        whereOperator = "equals";
+                        whereValue = String(value);
+                    }
+                }
+            }
+
+            const found = await findOneDocument(list, whereField, whereOperator, whereValue);
+
+            if (!found) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
+            }
+
+            ctx.body = {
+                ...found.data,
+                _id: found._id,
+                ...(found.createdAt && { createdAt: found.createdAt }),
+                ...(found.updatedAt && { updatedAt: found.updatedAt }),
+            };
+        } catch {
+            ctx.body = null;
+        }
 
         return { done: false, nextNodeIds };
     },

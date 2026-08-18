@@ -136,12 +136,12 @@ export async function findOneDocument(
     whereOperator: string,
     whereValue: string,
     projectFields: string[] = [],
-): Promise<{ _id: string; data: Record<string, any> } | undefined> {
+): Promise<{ _id: string; data: Record<string, any>; createdAt?: any; updatedAt?: any } | undefined> {
     await connectDB();
     const query = { list: list._id, owner: list.owner, ...buildWhereQuery(whereField, whereOperator, whereValue) };
     const doc = await ListDocument.findOne(query, buildProjection(projectFields)).lean();
     if (!doc) return undefined;
-    return { _id: String((doc as any)._id), data: (doc as any).data ?? {} };
+    return { _id: String((doc as any)._id), data: (doc as any).data ?? {}, createdAt: (doc as any).createdAt, updatedAt: (doc as any).updatedAt };
 }
 
 // Real find() — used by Find (./find.ts). Same DB-level filter treatment

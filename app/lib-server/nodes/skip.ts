@@ -8,11 +8,9 @@ const skipNode: NodeExecutor = {
             return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
         }
 
-        // Handle both array and { fields, documents } formats
+        // Handle array format from Find
         if (Array.isArray(ctx.body)) {
             ctx.body = ctx.body.slice(count);
-        } else if (ctx.body && typeof ctx.body === "object" && Array.isArray(ctx.body.documents)) {
-            ctx.body.documents = ctx.body.documents.slice(count);
         }
 
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };

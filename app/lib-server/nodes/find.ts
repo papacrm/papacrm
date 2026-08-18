@@ -11,7 +11,7 @@ const findNode: NodeExecutor = {
         const listId = String((ctx.body as any)?.listId ?? "").trim();
 
         if (!listId) {
-            ctx.body = { fields: [], documents: [] };
+            ctx.body = [];
             return { done: false, nextNodeIds };
         }
 
@@ -19,17 +19,15 @@ const findNode: NodeExecutor = {
             await connectDB();
             const module = await Module.findById(ctx.moduleId).select("owner").lean();
             if (!module) {
-                ctx.body = { fields: [], documents: [] };
+                ctx.body = [];
                 return { done: false, nextNodeIds };
             }
 
             const list = await List.findById(listId).lean();
             if (!list || String((list as any).owner) !== String((module as any).owner)) {
-                ctx.body = { fields: [], documents: [] };
+                ctx.body = [];
                 return { done: false, nextNodeIds };
             }
-
-            const fields = (list.fields ?? []).map((f: any) => ({ key: f.key, label: f.label, type: f.type, unique: f.unique ?? undefined }));
 
             // Smart filtering: if Match is chained directly after Find,
             // extract its query and apply at DB level instead of fetching all
@@ -64,9 +62,15 @@ const findNode: NodeExecutor = {
 
             const documents = await findDocuments(list, whereField, whereOperator, whereValue);
 
-            ctx.body = { fields, documents };
+            // Return array of flattened documents: [{ _id, field1, field2, ... }, ...]
+            ctx.body = documents.map((doc) => ({
+                ...doc.data,
+                _id: doc._id,
+                ...(doc.createdAt && { createdAt: doc.createdAt }),
+                ...(doc.updatedAt && { updatedAt: doc.updatedAt }),
+            }));
         } catch {
-            ctx.body = { fields: [], documents: [] };
+            ctx.body = [];
         }
 
         return { done: false, nextNodeIds };

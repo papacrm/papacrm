@@ -23,104 +23,25 @@ const projectNode: NodeExecutor = {
             return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
         }
 
-        // Handle structured format: { fields, documents }
-        if (ctx.body && typeof ctx.body === "object" && "documents" in ctx.body && Array.isArray((ctx.body as any).documents)) {
-            const existingFields = Array.isArray((ctx.body as any).fields) ? (ctx.body as any).fields : [];
-
-            // Filter fields array to only selected ones from list schema
-            const projectedFields = existingFields.filter((f: any) => selectedFields.includes(f.key));
-
-            // Add system fields (_id, createdAt, updatedAt) if selected
-            const systemFields = [];
-            if (selectedFields.includes("_id")) {
-                systemFields.push({ key: "_id", label: "_id", type: "text" });
-            }
-            if (selectedFields.includes("createdAt")) {
-                systemFields.push({ key: "createdAt", label: "createdAt", type: "date" });
-            }
-            if (selectedFields.includes("updatedAt")) {
-                systemFields.push({ key: "updatedAt", label: "updatedAt", type: "date" });
-            }
-
-            // Combine system fields with list fields
-            const allFields = [...systemFields, ...projectedFields];
-
-            // Filter document data to only selected fields
-            const projectedDocuments = (ctx.body as any).documents.map((doc: any) => {
-                const projectedData: Record<string, any> = {};
+        // Handle array format from Find: [{ _id, field1, field2, ..., createdAt, updatedAt }]
+        if (Array.isArray(ctx.body)) {
+            ctx.body = ctx.body.map((doc: any) => {
+                const projected: Record<string, any> = {};
                 for (const key of selectedFields) {
-                    if (key === "_id") {
-                        projectedData._id = doc._id;
-                    } else if (key === "createdAt") {
-                        projectedData.createdAt = doc.createdAt;
-                    } else if (key === "updatedAt") {
-                        projectedData.updatedAt = doc.updatedAt;
-                    } else {
-                        projectedData[key] = doc.data?.[key];
+                    if (key in doc) {
+                        projected[key] = doc[key];
                     }
                 }
-                return {
-                    _id: doc._id,
-                    data: projectedData,
-                    ...(selectedFields.includes("createdAt") && { createdAt: doc.createdAt }),
-                    ...(selectedFields.includes("updatedAt") && { updatedAt: doc.updatedAt }),
-                };
+                return projected;
             });
-
-            ctx.body = { fields: allFields, documents: projectedDocuments };
         }
-        // Handle plain array format: [{ _id, data, createdAt, updatedAt }]
-        else if (Array.isArray(ctx.body)) {
-            const projectedDocuments = ctx.body.map((doc: any) => {
-                const projectedData: Record<string, any> = {};
-                for (const key of selectedFields) {
-                    if (key === "_id") {
-                        projectedData._id = doc._id;
-                    } else if (key === "createdAt") {
-                        projectedData.createdAt = doc.createdAt;
-                    } else if (key === "updatedAt") {
-                        projectedData.updatedAt = doc.updatedAt;
-                    } else {
-                        projectedData[key] = doc.data?.[key];
-                    }
-                }
-                return {
-                    _id: doc._id,
-                    data: projectedData,
-                    ...(selectedFields.includes("createdAt") && { createdAt: doc.createdAt }),
-                    ...(selectedFields.includes("updatedAt") && { updatedAt: doc.updatedAt }),
-                };
-            });
-
-            // Convert to structured format with fields list
-            const fields = [];
-
-            // Add system fields if selected
-            if (selectedFields.includes("_id")) {
-                fields.push({ key: "_id", label: "_id", type: "text" });
-            }
-            if (selectedFields.includes("createdAt")) {
-                fields.push({ key: "createdAt", label: "createdAt", type: "date" });
-            }
-            if (selectedFields.includes("updatedAt")) {
-                fields.push({ key: "updatedAt", label: "updatedAt", type: "date" });
-            }
-
-            // Add data fields
-            const dataFieldKeys = selectedFields.filter((key) => key !== "_id" && key !== "createdAt" && key !== "updatedAt");
-            fields.push(...dataFieldKeys.map((key) => ({ key, label: key })));
-
-            ctx.body = { fields, documents: projectedDocuments };
-        }
-        // Handle a flat single-record shape (e.g. Find One's output, which
-        // hands the next node the found record's own fields directly
-        // rather than a { fields, documents } list). Selected fields are
-        // read straight off the object — no `.data` nesting to unwrap,
-        // since Find One already flattened that.
+        // Handle a flat single-record shape from Find One
         else if (ctx.body && typeof ctx.body === "object") {
             const projected: Record<string, any> = {};
             for (const key of selectedFields) {
-                if (key in (ctx.body as any)) projected[key] = (ctx.body as any)[key];
+                if (key in (ctx.body as any)) {
+                    projected[key] = (ctx.body as any)[key];
+                }
             }
             ctx.body = projected;
         }

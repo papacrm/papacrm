@@ -5,13 +5,12 @@ const projectNode: ModuleNodeDef = {
     label: "Project",
     description: "Select fields — chain from Find, Find One, List, or Query (through Match/Sort/Limit/Skip is fine too)",
     color: "#8b5cf6",
-    kind: "terminal",
+    kind: "action",
     fields: [
         {
             key: "selectedFields",
             label: "Fields",
             kind: "select",
-            // This marker tells the editor to use dynamic field checkboxes
             dynamicOptions: "findFields",
         },
     ],
@@ -19,7 +18,7 @@ const projectNode: ModuleNodeDef = {
     summarize: (data) => {
         try {
             const fields = JSON.parse(data?.selectedFields ?? "[]");
-            return Array.isArray(fields) && fields.length > 0 ? `${fields.length} field${fields.length === 1 ? "" : "s"}` : "No fields selected";
+            return Array.isArray(fields) && fields.length > 0 ? `${fields.length} field${fields.length === 1 ? "" : "s"}` : "All fields";
         } catch {
             return "All fields";
         }
