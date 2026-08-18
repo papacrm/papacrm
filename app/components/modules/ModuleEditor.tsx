@@ -1095,13 +1095,25 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 // The field-selection checkboxes live only on Project —
                                 // it reads the list schema off whichever data node feeds
                                 // it, walking back through any pass-through pipeline
-                                // nodes (Match/Sort/Limit/Skip/Pass data through) in
-                                // between to find the actual source: Find/List (by id)
-                                // or Find One/Query (by name-match against your Lists).
+                                // nodes in between to find the actual source: List (by
+                                // id) or List (create if not exists)/Query (by
+                                // name-match against your Lists).
+                                //
+                                // Find and Find One are pass-through for this purpose,
+                                // NOT a source, even though they're the node you'd
+                                // typically chain Project from: their own node-def has
+                                // `fields: []` (see lib/node-defs/find.ts /
+                                // findOne.ts) — they carry no list id/name of their
+                                // own and only ever inherit the list from whichever
+                                // List/List-upsert/Query node feeds *them* at runtime.
+                                // Treating them as a terminal source here meant reading
+                                // `sourceNode.data.list` off a node that never has that
+                                // field, so Find → Match → Project (the documented
+                                // pattern) never resolved any fields.
                                 if (field.kind === "select" && field.dynamicOptions === "findFields" && selectedNode.type === "project") {
-                                    const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip", "passThrough"];
-                                    const ID_SOURCE_TYPES: ModuleNodeType[] = ["find", "list"];
-                                    const NAME_SOURCE_TYPES: ModuleNodeType[] = ["findOne", "query"];
+                                    const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip", "passThrough", "find", "findOne"];
+                                    const ID_SOURCE_TYPES: ModuleNodeType[] = ["list"];
+                                    const NAME_SOURCE_TYPES: ModuleNodeType[] = ["query", "listUpsert"];
 
                                     let sourceNode: ModuleNode | null = null;
                                     let cursorId: string | null = selectedNode.id;
@@ -1128,6 +1140,9 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                         if (ID_SOURCE_TYPES.includes(sourceNode.type)) {
                                             return lists?.find((l) => l._id === sourceNode!.data?.list);
                                         }
+                                        // Query names its list via data.listName; List
+                                        // (create if not exists) via data.name — same
+                                        // case-insensitive match either way.
                                         const name = String(sourceNode.data?.listName ?? sourceNode.data?.name ?? "").trim().toLowerCase();
                                         return name ? lists?.find((l) => l.name.trim().toLowerCase() === name) : undefined;
                                     })();
@@ -1146,7 +1161,10 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                         <div key={field.key} className="flex flex-col gap-3">
                                             <Label>{field.label}</Label>
                                             {!findNode ? (
-                                                <p className="text-sm text-neutral-500">Chain from a Find, Find One, List, or Query node to see fields</p>
+                                                <p className="text-sm text-neutral-500">
+                                                    Chain from a List, List (create if not exists), or Query node — Find/Find One/Match/Sort/Limit/Skip in
+                                                    between are fine too — to see fields
+                                                </p>
                                             ) : !findList ? (
                                                 <p className="text-sm text-neutral-500">{noListMessage}</p>
                                             ) : (

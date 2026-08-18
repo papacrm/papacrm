@@ -64,8 +64,13 @@ const findOneNode: NodeExecutor = {
                         }
                     })();
 
+                    // Skip the DB-level optimization for an operator
+                    // condition (e.g. { "$gt": 3 }) — buildWhereQuery can't
+                    // express it, and stringifying it produces a filter
+                    // that never matches. Let Match filter in memory
+                    // instead (see ./match.ts).
                     const entries = Object.entries(query);
-                    if (entries.length === 1) {
+                    if (entries.length === 1 && entries[0][1] !== null && typeof entries[0][1] !== "object") {
                         const [key, value] = entries[0];
                         whereField = key;
                         whereOperator = "equals";
@@ -87,7 +92,7 @@ const findOneNode: NodeExecutor = {
                     })();
 
                     const entries = Object.entries(query);
-                    if (entries.length === 1) {
+                    if (entries.length === 1 && entries[0][1] !== null && typeof entries[0][1] !== "object") {
                         const [key, value] = entries[0];
                         whereField = key;
                         whereOperator = "equals";

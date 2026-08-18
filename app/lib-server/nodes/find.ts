@@ -49,9 +49,15 @@ const findNode: NodeExecutor = {
 
                     // Only optimize single-field exact-match queries for now
                     // (buildWhereQuery supports equals/notEquals/contains, but
-                    // Match's JSON query is always exact equality checks).
+                    // Match's JSON query can also be exact equality checks).
+                    // An operator condition (e.g. { "$gt": 3 }) can't be
+                    // expressed by buildWhereQuery — stringifying it used to
+                    // produce "[object Object]", a DB filter that can never
+                    // match anything real. Skip the DB-level optimization
+                    // for those and let Match filter in memory instead,
+                    // where it has full operator support (see ./match.ts).
                     const entries = Object.entries(query);
-                    if (entries.length === 1) {
+                    if (entries.length === 1 && entries[0][1] !== null && typeof entries[0][1] !== "object") {
                         const [key, value] = entries[0];
                         whereField = key;
                         whereOperator = "equals";
