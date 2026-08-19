@@ -68,12 +68,14 @@ export type ModuleNodeType =
     | "image"
     | "selectInput"
     | "consoleLog"
-    | "passThrough";
+    | "passThrough"
+    | "box"
+    | "comment";
 
 // Groups nodes in the editor's palette (see ModuleEditor.tsx). Purely a
 // UI grouping — has no effect on execution. To add a new category, add it
 // here and give it an entry in CATEGORY_META in index.ts.
-export type ModuleNodeCategory = "triggers" | "data" | "logic" | "requests" | "responses" | "blocks" | "forms";
+export type ModuleNodeCategory = "triggers" | "data" | "logic" | "requests" | "responses" | "blocks" | "forms" | "notes";
 
 export interface ModuleNode {
     id: string;
@@ -132,7 +134,11 @@ export interface ModuleNodeDef {
     color: string;
     // Trigger nodes have no input handle; terminal nodes have no output
     // handle. "branch" nodes have two labelled outputs instead of one.
-    kind: "trigger" | "action" | "terminal" | "branch";
+    // "annotation" nodes (Group Box, Comment) have no handles at all —
+    // they're canvas-only decoration, never wired into the flow and
+    // never executed. See ModuleEditor.tsx's node card rendering and
+    // lib-server/nodes/box.ts / comment.ts (unreachable no-op stubs).
+    kind: "trigger" | "action" | "terminal" | "branch" | "annotation";
     fields: ModuleField[];
     defaultData: () => Record<string, any>;
     // One-line summary shown on the node card in the canvas.

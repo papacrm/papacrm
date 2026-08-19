@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, Fragment } from "react";
 import { Link } from "nukejs";
+import { RefreshCw } from "lucide-react";
 import { ORPCError } from "@orpc/client";
 import { orpc, withAuthRetry } from "@/client";
 import { Button } from "@/app/components/ui/button";
@@ -44,6 +45,7 @@ export default function ListEditor({ list }: { list: ListSummary }) {
     const [documents, setDocuments] = useState<ListDocumentRecord[] | null>(null);
     const [total, setTotal] = useState(0);
     const [documentsError, setDocumentsError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
     const [creating, setCreating] = useState(false);
     const [newDocData, setNewDocData] = useState<Record<string, any>>({});
     const [savingNew, setSavingNew] = useState(false);
@@ -91,6 +93,20 @@ export default function ListEditor({ list }: { list: ListSummary }) {
         loadDocuments();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [list._id, page, sortKey, sortDir]);
+
+    // Manual refresh (the ↻ button beside "+ Add document") — re-runs the
+    // exact same fetch as the effect above, just with a brief spinner so
+    // clicking it gives visible feedback even when the data hasn't
+    // actually changed.
+    async function refreshDocuments() {
+        setRefreshing(true);
+        setDocumentsError(null);
+        try {
+            await loadDocuments();
+        } finally {
+            setRefreshing(false);
+        }
+    }
 
     // Filter value changes debounce so we're not firing a request per
     // keystroke; jumps back to page 1 since the result set shape changes.
@@ -328,9 +344,22 @@ export default function ListEditor({ list }: { list: ListSummary }) {
                         <CardTitle className="text-base">Documents</CardTitle>
                         <CardDescription>{fields.length === 0 ? "Add a field above to start adding documents." : "Rows in this list."}</CardDescription>
                     </div>
-                    <Button type="button" size="sm" disabled={fields.length === 0} onClick={openCreate}>
-                        + Add document
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={refreshing}
+                            onClick={refreshDocuments}
+                            aria-label="Refresh documents"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                        </Button>
+                        <Button type="button" size="sm" disabled={fields.length === 0} onClick={openCreate}>
+                            + Add document
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
                     {documentsError && <p className="text-sm text-destructive">{documentsError}</p>}

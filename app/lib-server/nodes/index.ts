@@ -65,6 +65,8 @@ import imageNode from "./image";
 import selectInputNode from "./selectInput";
 import consoleLogNode from "./consoleLog";
 import passThroughNode from "./passThrough";
+import boxNode from "./box";
+import commentNode from "./comment";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib-server/nodes/<name>.ts` exporting a NodeExecutor (copy an
@@ -140,6 +142,8 @@ export const NODE_EXECUTORS: Record<ModuleNodeType, NodeExecutor> = {
     selectInput: selectInputNode,
     consoleLog: consoleLogNode,
     passThrough: passThroughNode,
+    box: boxNode,
+    comment: commentNode,
 };
 
 export * from "./types";

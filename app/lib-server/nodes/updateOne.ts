@@ -1,8 +1,8 @@
 import ListDocument from "../models/ListDocument";
-import type { IModuleNode } from "../models/Module";
+import type { IModuleNode, IModuleEdge } from "../models/Module";
 import { sanitizeDocumentData } from "../listValidation";
 import { findUniqueFieldConflict } from "../listUnique";
-import { nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
+import { MAX_NODES, nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
 import { resolveListTarget } from "./listResolve";
 
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
@@ -36,22 +36,70 @@ function emptyResult() {
     return { _matched: false, _upserted: false };
 }
 
+// Finds the config nodes Update One needs — a Match, an Update, and a
+// List/List (create if not exists) — anywhere in its downstream chain,
+// not just as immediate siblings fanned out directly off Update One.
+// People commonly wire these one after another instead (e.g. Update One
+// → Update → List → Match → Json) rather than fanning all three out in
+// parallel, and that's just as valid a way to configure this node — so
+// this walks forward through the graph, breadth-first, until it's found
+// one of each (or run out of graph / hit the same MAX_NODES budget the
+// engine itself uses to guard against cycles).
+//
+// Each of these nodes still executes for real afterward too, same as
+// when they're direct siblings — this function only changes how Update
+// One *discovers* its own config, not how the graph actually runs.
+function findChainedConfigNodes(
+    node: IModuleNode,
+    edges: IModuleEdge[],
+    nodes: IModuleNode[],
+): { matchNode?: IModuleNode; updateNode?: IModuleNode; targetNode?: IModuleNode } {
+    let matchNode: IModuleNode | undefined;
+    let updateNode: IModuleNode | undefined;
+    let targetNode: IModuleNode | undefined;
+
+    const visited = new Set<string>([node.id]);
+    let frontier = nextEdgeTargets(node, edges);
+    let visitedCount = 0;
+
+    while (frontier.length > 0 && visitedCount < MAX_NODES) {
+        const nextFrontier: string[] = [];
+        for (const id of frontier) {
+            if (visited.has(id)) continue;
+            visited.add(id);
+            visitedCount++;
+
+            const candidate = nodes.find((n) => n.id === id);
+            if (!candidate) continue;
+
+            if (!matchNode && candidate.type === "match") matchNode = candidate;
+            if (!updateNode && candidate.type === "update") updateNode = candidate;
+            if (!targetNode && (candidate.type === "list" || candidate.type === "listUpsert")) targetNode = candidate;
+
+            nextFrontier.push(...nextEdgeTargets(candidate, edges));
+        }
+        if (matchNode && updateNode && targetNode) break;
+        frontier = nextFrontier;
+    }
+
+    return { matchNode, updateNode, targetNode };
+}
+
 const updateOneNode: NodeExecutor = {
     async run({ node, ctx, edges, nodes }) {
         const nextNodeIds = nextEdgeTargets(node, edges);
 
         // Match, Update, and the target List/List (create if not exists)
-        // are all read straight off whichever nodes are chained right
-        // after this one — same as resolveListTarget below reads a List
-        // node's own data without running its full ctx.body-replacing
-        // logic. Match and Update nodes work the same way here: their
+        // are read straight off whichever nodes are found downstream of
+        // this one — same as resolveListTarget below reads a List node's
+        // own data without running its full ctx.body-replacing logic.
+        // Match and Update nodes work the same way here: their
         // `data.query`/`data.update` are read directly rather than
-        // executing them for real, so they can sit in the chain purely
-        // to configure this node.
-        const nextNodes = nextNodeIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is IModuleNode => Boolean(n));
-        const matchNode = nextNodes.find((n) => n.type === "match");
-        const updateNode = nextNodes.find((n) => n.type === "update");
-        const targetNode = nextNodes.find((n) => n.type === "list" || n.type === "listUpsert");
+        // executing them for real, so they can sit anywhere in the chain
+        // purely to configure this node — as direct fan-out siblings, or
+        // spread across several hops (Update One → Update → List →
+        // Match), whichever the graph was actually built as.
+        const { matchNode, updateNode, targetNode } = findChainedConfigNodes(node, edges, nodes);
 
         // Same {{field}}/{{sourceNodeId.field}} templating as everywhere
         // else, applied recursively so both Match and Update can pull

@@ -36,6 +36,60 @@ import {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 78;
+// Fallback footprint for a Comment sticky note when its width/height
+// fields are empty or unparsable.
+const COMMENT_DEFAULT_WIDTH = 220;
+const COMMENT_DEFAULT_HEIGHT = 140;
+// Fallback footprint for a Group Box when its width/height fields are
+// empty or unparsable.
+const BOX_DEFAULT_WIDTH = 360;
+const BOX_DEFAULT_HEIGHT = 240;
+// Floor for dragging either annotation node's resize handle — keeps a
+// title/text and the resize grip from ever overlapping themselves.
+const ANNOTATION_MIN_WIDTH = 160;
+const ANNOTATION_MIN_HEIGHT = 90;
+
+// Preset sticky-note palette for the Comment node's Color field. Keyed by
+// the same values as COLOR_OPTIONS in node-defs/comment.ts.
+const COMMENT_COLORS: Record<string, { bg: string; border: string; selectedBorder: string; label: string; text: string; placeholder: string }> = {
+    yellow: { bg: "#fef9c3", border: "#fde68a", selectedBorder: "#eab308", label: "#a16207", text: "#78350f", placeholder: "#ca8a04" },
+    pink: { bg: "#fce7f3", border: "#fbcfe8", selectedBorder: "#ec4899", label: "#be185d", text: "#831843", placeholder: "#db2777" },
+    blue: { bg: "#dbeafe", border: "#bfdbfe", selectedBorder: "#3b82f6", label: "#1d4ed8", text: "#1e3a8a", placeholder: "#2563eb" },
+    green: { bg: "#dcfce7", border: "#bbf7d0", selectedBorder: "#22c55e", label: "#15803d", text: "#14532d", placeholder: "#16a34a" },
+    purple: { bg: "#ede9fe", border: "#ddd6fe", selectedBorder: "#8b5cf6", label: "#6d28d9", text: "#4c1d95", placeholder: "#7c3aed" },
+    gray: { bg: "#f3f4f6", border: "#e5e7eb", selectedBorder: "#6b7280", label: "#374151", text: "#1f2937", placeholder: "#6b7280" },
+};
+
+function commentColors(data: Record<string, any> | undefined) {
+    return COMMENT_COLORS[data?.color as string] ?? COMMENT_COLORS.yellow;
+}
+
+// Most nodes are a fixed NODE_WIDTH × NODE_HEIGHT card, but the two
+// canvas-only "annotation" nodes (see node-defs/types.ts) are bigger and
+// user-resizable — both Group Box and Comment persist their size in
+// data.width/data.height (see the resize handle in the node card below
+// and resizeRef in the drag effect). Used everywhere a node's actual
+// on-screen footprint matters — drag clamping, marquee selection,
+// connect-target hit testing, and the card's own rendered size.
+function nodeSize(node: Pick<ModuleNode, "type" | "data">): { width: number; height: number } {
+    if (node.type === "box") {
+        const w = parseInt(node.data?.width, 10);
+        const h = parseInt(node.data?.height, 10);
+        return {
+            width: Number.isFinite(w) && w > 0 ? w : BOX_DEFAULT_WIDTH,
+            height: Number.isFinite(h) && h > 0 ? h : BOX_DEFAULT_HEIGHT,
+        };
+    }
+    if (node.type === "comment") {
+        const w = parseInt(node.data?.width, 10);
+        const h = parseInt(node.data?.height, 10);
+        return {
+            width: Number.isFinite(w) && w > 0 ? w : COMMENT_DEFAULT_WIDTH,
+            height: Number.isFinite(h) && h > 0 ? h : COMMENT_DEFAULT_HEIGHT,
+        };
+    }
+    return { width: NODE_WIDTH, height: NODE_HEIGHT };
+}
 // Starting size of the canvas workspace — big enough that most modules
 // never need to grow it, so there's only a little scroll to begin with.
 const INITIAL_CANVAS_WIDTH = 2400;
@@ -143,6 +197,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
     // read by the window-level mousemove/mouseup below (see marqueeRect
     // state, which is just this ref's live rectangle for rendering).
     const marqueeRef = useRef<{ startX: number; startY: number; additive: boolean } | null>(null);
+    // Drag-to-resize for the two annotation nodes (Group Box, Comment) —
+    // set on their corner grip's mousedown, read by the same window-level
+    // mousemove/mouseup as dragRef/marqueeRef/connectRef above. Only ever
+    // targets a single node (resizing a multi-selection isn't supported).
+    const resizeRef = useRef<{ id: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
     const designerRef = useRef<HTMLDivElement>(null);
     const layoutDragRef = useRef<{
         viewId: string;
@@ -263,6 +322,25 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         }
 
         function onMove(e: MouseEvent) {
+            if (resizeRef.current) {
+                const { x, y } = canvasPoint(e);
+                const { id, startX, startY, startWidth, startHeight } = resizeRef.current;
+                const dx = x - startX;
+                const dy = y - startY;
+                setNodes((prev) =>
+                    prev.map((n) => {
+                        if (n.id !== id) return n;
+                        const maxWidth = Math.max(ANNOTATION_MIN_WIDTH, canvasSizeRef.current.width - n.x);
+                        const maxHeight = Math.max(ANNOTATION_MIN_HEIGHT, canvasSizeRef.current.height - n.y);
+                        const width = Math.round(Math.max(ANNOTATION_MIN_WIDTH, Math.min(maxWidth, startWidth + dx)));
+                        const height = Math.round(Math.max(ANNOTATION_MIN_HEIGHT, Math.min(maxHeight, startHeight + dy)));
+                        return { ...n, data: { ...n.data, width: String(width), height: String(height) } };
+                    }),
+                );
+                setDirty(true);
+                return;
+            }
+
             if (dragRef.current) {
                 const { x, y } = canvasPoint(e);
                 const { startX, startY, startPositions } = dragRef.current;
@@ -272,10 +350,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                     prev.map((n) => {
                         const start = startPositions.get(n.id);
                         if (!start) return n;
+                        const size = nodeSize(n);
                         return {
                             ...n,
-                            x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, start.x + dx)),
-                            y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, start.y + dy)),
+                            x: Math.max(0, Math.min(canvasSizeRef.current.width - size.width, start.x + dx)),
+                            y: Math.max(0, Math.min(canvasSizeRef.current.height - size.height, start.y + dy)),
                         };
                     }),
                 );
@@ -305,6 +384,9 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         }
 
         function onUp(e: MouseEvent) {
+            if (resizeRef.current) {
+                resizeRef.current = null;
+            }
             if (dragRef.current) {
                 dragRef.current = null;
             }
@@ -321,9 +403,10 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                 // an additive click) on mousedown, so there's nothing more
                 // to do here.
                 if (right - left > 4 || bottom - top > 4) {
-                    const touched = nodesRef.current.filter(
-                        (n) => n.x < right && n.x + NODE_WIDTH > left && n.y < bottom && n.y + NODE_HEIGHT > top,
-                    );
+                    const touched = nodesRef.current.filter((n) => {
+                        const size = nodeSize(n);
+                        return n.x < right && n.x + size.width > left && n.y < bottom && n.y + size.height > top;
+                    });
                     setSelectedIds((prev) => {
                         const next = additive ? new Set(prev) : new Set<string>();
                         touched.forEach((n) => next.add(n.id));
@@ -339,8 +422,10 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                 const { x, y } = canvasPoint(e);
                 const target = nodesRef.current.find((n) => {
                     if (n.id === fromId) return false;
-                    if (NODE_DEFS[n.type].kind === "trigger") return false;
-                    return x >= n.x - 14 && x <= n.x + NODE_WIDTH + 14 && y >= n.y - 14 && y <= n.y + NODE_HEIGHT + 14;
+                    const targetKind = NODE_DEFS[n.type].kind;
+                    if (targetKind === "trigger" || targetKind === "annotation") return false;
+                    const size = nodeSize(n);
+                    return x >= n.x - 14 && x <= n.x + size.width + 14 && y >= n.y - 14 && y <= n.y + size.height + 14;
                 });
                 if (target) {
                     // A handle can fan out to more than one target now (e.g.
@@ -528,9 +613,30 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         setConnectingLine({ x1: from.x, y1: from.y, x2: from.x, y2: from.y });
     }
 
+    // Bottom-right corner grip on Group Box / Comment cards — the only
+    // two node types with a user-resizable footprint (see nodeSize()
+    // above). Selects just this node (dragging its own resize handle
+    // isn't a group operation) and hands off to resizeRef, read by the
+    // window-level onMove/onUp in the effect above.
+    function handleResizeMouseDown(e: React.MouseEvent, node: ModuleNode) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (readOnly) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        setSelectedIds(new Set([node.id]));
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left + canvas.scrollLeft;
+        const y = e.clientY - rect.top + canvas.scrollTop;
+        const size = nodeSize(node);
+        resizeRef.current = { id: node.id, startX: x, startY: y, startWidth: size.width, startHeight: size.height };
+    }
+
     function addNode(type: ModuleNodeType) {
         if (readOnly) return;
         const def = NODE_DEFS[type];
+        const data = def.defaultData();
+        const size = nodeSize({ type, data });
 
         // Drop the new node in the middle of whatever's currently
         // scrolled into view, not a fixed spot on the (much larger)
@@ -541,8 +647,8 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         let y = 60;
         const canvas = canvasRef.current;
         if (canvas) {
-            x = canvas.scrollLeft + canvas.clientWidth / 2 - NODE_WIDTH / 2;
-            y = canvas.scrollTop + canvas.clientHeight / 2 - NODE_HEIGHT / 2;
+            x = canvas.scrollLeft + canvas.clientWidth / 2 - size.width / 2;
+            y = canvas.scrollTop + canvas.clientHeight / 2 - size.height / 2;
         }
         // Small stagger so adding several nodes in a row without moving
         // the viewport doesn't stack them exactly on top of each other.
@@ -550,15 +656,15 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         x += (stackIndex % 3) * 28;
         y += Math.floor(stackIndex / 3) * 28;
 
-        x = Math.max(0, Math.min(canvasSize.width - NODE_WIDTH, x));
-        y = Math.max(0, Math.min(canvasSize.height - NODE_HEIGHT, y));
+        x = Math.max(0, Math.min(canvasSize.width - size.width, x));
+        y = Math.max(0, Math.min(canvasSize.height - size.height, y));
 
         const node: ModuleNode = {
             id: newId("n"),
             type,
             x,
             y,
-            data: def.defaultData(),
+            data,
         };
         setNodes((prev) => [...prev, node]);
         setSelectedIds(new Set([node.id]));
@@ -600,13 +706,16 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         if (sources.length === 0) return;
 
         const idMap = new Map(sources.map((n) => [n.id, newId("n")]));
-        const copies: ModuleNode[] = sources.map((source) => ({
-            ...source,
-            id: idMap.get(source.id)!,
-            x: Math.max(0, Math.min(canvasSizeRef.current.width - NODE_WIDTH, source.x + 32)),
-            y: Math.max(0, Math.min(canvasSizeRef.current.height - NODE_HEIGHT, source.y + 32)),
-            data: { ...source.data },
-        }));
+        const copies: ModuleNode[] = sources.map((source) => {
+            const size = nodeSize(source);
+            return {
+                ...source,
+                id: idMap.get(source.id)!,
+                x: Math.max(0, Math.min(canvasSizeRef.current.width - size.width, source.x + 32)),
+                y: Math.max(0, Math.min(canvasSizeRef.current.height - size.height, source.y + 32)),
+                data: { ...source.data },
+            };
+        });
         const copiedEdges: ModuleEdge[] = edges
             .filter((e) => idMap.has(e.source) && idMap.has(e.target))
             .map((e) => ({ ...e, id: newId("e"), source: idMap.get(e.source)!, target: idMap.get(e.target)! }));
@@ -983,9 +1092,108 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             />
                         )}
 
-                        {nodes.map((node) => {
+                        {[...nodes].sort((a, b) => (a.type === "box" ? -1 : 0) - (b.type === "box" ? -1 : 0)).map((node) => {
                             const def = NODE_DEFS[node.type];
                             const isSelected = selectedIds.has(node.id);
+                            const size = nodeSize(node);
+                            const isAnnotation = def.kind === "annotation";
+
+                            if (node.type === "comment") {
+                                const palette = commentColors(node.data);
+                                return (
+                                    <div
+                                        key={node.id}
+                                        onMouseDown={(e) => handleNodeMouseDown(e, node)}
+                                        className={`absolute select-none rounded-lg border shadow-sm ${isSelected ? "ring-1" : ""} cursor-grab active:cursor-grabbing`}
+                                        style={{
+                                            left: node.x,
+                                            top: node.y,
+                                            width: size.width,
+                                            height: size.height,
+                                            backgroundColor: palette.bg,
+                                            borderColor: isSelected ? palette.selectedBorder : palette.border,
+                                            ...(isSelected ? ({ "--tw-ring-color": palette.selectedBorder } as React.CSSProperties) : {}),
+                                        }}
+                                    >
+                                        <div className="flex items-center justify-between gap-2 px-2.5 pt-2">
+                                            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.label }}>
+                                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: def.color }} />
+                                                Comment
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onClick={() => deleteNode(node.id)}
+                                                className="shrink-0 hover:text-destructive"
+                                                style={{ color: palette.placeholder }}
+                                                aria-label="Delete node"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                        <div
+                                            className="h-[calc(100%-28px)] overflow-hidden whitespace-pre-wrap break-words px-2.5 pb-2 pt-1 text-xs"
+                                            style={{ color: palette.text }}
+                                        >
+                                            {node.data?.text ? (
+                                                String(node.data.text)
+                                            ) : (
+                                                <span style={{ color: palette.placeholder }}>Empty comment</span>
+                                            )}
+                                        </div>
+                                        <div
+                                            data-resize-handle
+                                            onMouseDown={(e) => handleResizeMouseDown(e, node)}
+                                            className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+                                            title="Drag to resize"
+                                        >
+                                            <svg viewBox="0 0 10 10" className="h-full w-full p-0.5" style={{ color: palette.selectedBorder, opacity: 0.6 }}>
+                                                <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            if (node.type === "box") {
+                                return (
+                                    <div
+                                        key={node.id}
+                                        onMouseDown={(e) => handleNodeMouseDown(e, node)}
+                                        className={`absolute cursor-grab select-none rounded-lg border-2 border-dashed bg-neutral-50/60 active:cursor-grabbing ${
+                                            isSelected ? "border-neutral-500" : "border-neutral-300"
+                                        }`}
+                                        style={{ left: node.x, top: node.y, width: size.width, height: size.height }}
+                                    >
+                                        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+                                            <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-neutral-600">
+                                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: def.color }} />
+                                                <span className="truncate">{node.data?.title || "Untitled group"}</span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onClick={() => deleteNode(node.id)}
+                                                className="shrink-0 text-neutral-300 hover:text-destructive"
+                                                aria-label="Delete node"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                        <div
+                                            data-resize-handle
+                                            onMouseDown={(e) => handleResizeMouseDown(e, node)}
+                                            className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize text-neutral-400 hover:text-neutral-600"
+                                            title="Drag to resize"
+                                        >
+                                            <svg viewBox="0 0 10 10" className="h-full w-full p-0.5">
+                                                <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
                             return (
                                 <div
                                     key={node.id}
@@ -993,7 +1201,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     className={`absolute cursor-grab select-none rounded-lg border bg-white shadow-sm active:cursor-grabbing ${
                                         isSelected ? "border-neutral-900 ring-1 ring-neutral-900" : "border-neutral-200"
                                     }`}
-                                    style={{ left: node.x, top: node.y, width: NODE_WIDTH, minHeight: NODE_HEIGHT }}
+                                    style={{ left: node.x, top: node.y, width: size.width, minHeight: size.height }}
                                 >
                                     <div className="flex items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2">
                                         <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-neutral-900">
@@ -1012,7 +1220,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     </div>
                                     <div className="truncate px-3 py-2 text-xs text-neutral-500">{def.summarize(node.data ?? {})}</div>
 
-                                    {def.kind !== "trigger" && (
+                                    {def.kind !== "trigger" && !isAnnotation && (
                                         <div
                                             data-handle
                                             className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-neutral-400"
@@ -1036,7 +1244,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                 title="False"
                                             />
                                         </>
-                                    ) : def.kind !== "terminal" ? (
+                                    ) : def.kind !== "terminal" && !isAnnotation ? (
                                         <div
                                             data-handle
                                             onMouseDown={(e) => handleOutputMouseDown(e, node, null)}
@@ -1045,6 +1253,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     ) : null}
                                 </div>
                             );
+
                         })}
                     </div>
                 </div>

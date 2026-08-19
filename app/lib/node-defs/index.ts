@@ -64,6 +64,8 @@ import imageNode from "./image";
 import selectInputNode from "./selectInput";
 import consoleLogNode from "./consoleLog";
 import passThroughNode from "./passThrough";
+import boxNode from "./box";
+import commentNode from "./comment";
 
 // ─── Adding a new node ──────────────────────────────────────────────────
 // 1. Create `app/lib/node-defs/<name>.ts` exporting a ModuleNodeDef (copy an
@@ -140,6 +142,8 @@ export const NODE_DEFS: Record<ModuleNodeType, ModuleNodeDef> = {
     selectInput: selectInputNode,
     consoleLog: consoleLogNode,
     passThrough: passThroughNode,
+    box: boxNode,
+    comment: commentNode,
 };
 
 export const NODE_ORDER: ModuleNodeType[] = [
@@ -208,6 +212,8 @@ export const NODE_ORDER: ModuleNodeType[] = [
     "distinct",
     "delay",
     "consoleLog",
+    "box",
+    "comment",
 ];
 
 // ─── Editor palette categories ────────────────────────────────────────
@@ -216,7 +222,7 @@ export const NODE_ORDER: ModuleNodeType[] = [
 // CATEGORY_META gives each one a label/blurb; NODE_CATEGORIES assigns
 // every node to exactly one. Every ModuleNodeType must have an entry
 // below, or it silently won't show up in any palette section.
-export const CATEGORY_ORDER: ModuleNodeCategory[] = ["triggers", "data", "logic", "requests", "responses", "blocks", "forms"];
+export const CATEGORY_ORDER: ModuleNodeCategory[] = ["triggers", "data", "logic", "requests", "responses", "blocks", "forms", "notes"];
 
 export const CATEGORY_META: Record<ModuleNodeCategory, { label: string; blurb: string }> = {
     triggers: { label: "Triggers", blurb: "Where a run starts" },
@@ -226,6 +232,7 @@ export const CATEGORY_META: Record<ModuleNodeCategory, { label: string; blurb: s
     responses: { label: "Responses", blurb: "What a webhook sends back" },
     blocks: { label: "Page blocks", blurb: "Pieces you connect into a View" },
     forms: { label: "Form fields", blurb: "Inputs a person fills in" },
+    notes: { label: "Notes & organization", blurb: "Canvas-only — group and annotate, don't run" },
 };
 
 export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
@@ -300,6 +307,9 @@ export const NODE_CATEGORIES: Record<ModuleNodeType, ModuleNodeCategory> = {
     textareaInput: "forms",
     numberInput: "forms",
     selectInput: "forms",
+
+    box: "notes",
+    comment: "notes",
 };
 
 export * from "./types";

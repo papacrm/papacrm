@@ -67,7 +67,10 @@ export type ModuleNodeType =
     | "text"
     | "image"
     | "selectInput"
-    | "consoleLog";
+    | "consoleLog"
+    | "passThrough"
+    | "box"
+    | "comment";
 
 export interface IModuleNode {
     id: string;
@@ -112,6 +115,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "saveRecord",
                 "saveToList",
                 "updateOne",
+                "update",
                 "mapper",
                 "function",
                 "call",
@@ -143,6 +147,7 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "link",
                 "div",
                 "class",
+                "style",
                 "textInput",
                 "checkboxInput",
                 "textareaInput",
@@ -166,6 +171,9 @@ const ModuleNodeSchema = new Schema<IModuleNode>(
                 "image",
                 "selectInput",
                 "consoleLog",
+                "passThrough",
+                "box",
+                "comment",
             ],
         },
         x: { type: Number, required: true, default: 0 },
