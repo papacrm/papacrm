@@ -1,5 +1,5 @@
 import type { IModuleNode } from "../models/Module";
-import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, uniqueIncomingSources, type NodeExecutor } from "./types";
+import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, renderTemplate, uniqueIncomingSources, type NodeContext, type NodeExecutor } from "./types";
 
 function toNumberOrNaN(v: unknown): number {
     if (typeof v === "number") return v;
@@ -28,42 +28,49 @@ function parseTypedValue(raw: string): unknown {
     return raw;
 }
 
-function evaluateCondition(node: IModuleNode, body: unknown, query: Record<string, string>): boolean {
+function evaluateCondition(node: IModuleNode, body: unknown, query: Record<string, string>, ctx: NodeContext): boolean {
     const { field = "", operator = "equals", value = "" } = node.data ?? {};
     const haystack = readPath(body, field) ?? readPath(query, field);
+    // Same {{field}}/{{sourceNodeId.field}} templating every other node's
+    // config text gets (see renderTemplate in ./types) — lets "Value" hold
+    // something computed earlier in the run (e.g. "{{now}}" from a Now
+    // node) instead of only ever a hard-coded literal. A plain literal
+    // like "5" or "ok" round-trips through renderTemplate unchanged since
+    // it has no {{ }} placeholders to replace.
+    const renderedValue = renderTemplate(String(value ?? ""), ctx);
 
     switch (operator) {
         case "exists":
             return haystack !== undefined && haystack !== null && haystack !== "";
         case "gt": {
             const a = toNumberOrNaN(haystack);
-            const b = toNumberOrNaN(value);
+            const b = toNumberOrNaN(renderedValue);
             return !Number.isNaN(a) && !Number.isNaN(b) && a > b;
         }
         case "gte": {
             const a = toNumberOrNaN(haystack);
-            const b = toNumberOrNaN(value);
+            const b = toNumberOrNaN(renderedValue);
             return !Number.isNaN(a) && !Number.isNaN(b) && a >= b;
         }
         case "lt": {
             const a = toNumberOrNaN(haystack);
-            const b = toNumberOrNaN(value);
+            const b = toNumberOrNaN(renderedValue);
             return !Number.isNaN(a) && !Number.isNaN(b) && a < b;
         }
         case "lte": {
             const a = toNumberOrNaN(haystack);
-            const b = toNumberOrNaN(value);
+            const b = toNumberOrNaN(renderedValue);
             return !Number.isNaN(a) && !Number.isNaN(b) && a <= b;
         }
         case "strictEquals":
-            return haystack === parseTypedValue(String(value ?? ""));
+            return haystack === parseTypedValue(renderedValue);
         case "notEquals":
-            return !looseEquals(haystack, value);
+            return !looseEquals(haystack, renderedValue);
         case "contains":
-            return typeof haystack === "string" && haystack.includes(String(value));
+            return typeof haystack === "string" && haystack.includes(renderedValue);
         case "equals":
         default:
-            return looseEquals(haystack, value);
+            return looseEquals(haystack, renderedValue);
     }
 }
 
@@ -85,7 +92,7 @@ const conditionNode: NodeExecutor = {
             ctx.body = flattenJoinBody(ctx.body as Record<string, unknown>);
         }
 
-        const branch = evaluateCondition(node, ctx.body, ctx.query) ? "true" : "false";
+        const branch = evaluateCondition(node, ctx.body, ctx.query, ctx) ? "true" : "false";
 
         // Whatever's currently on ctx.body — a submitted form's fields, a
         // record an earlier node found, etc. — always forwards to the

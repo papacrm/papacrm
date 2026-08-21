@@ -1,4 +1,4 @@
-import { readPath, nextEdgeTargets, type NodeExecutor } from "./types";
+import { readPath, nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
 
 // Numeric-aware equality, mirroring Condition's looseEquals (see
 // ./condition.ts): "5" == 5 the way a low-code user expects, falling back
@@ -96,7 +96,7 @@ function matchesQuery(doc: Record<string, any>, query: Record<string, any>): boo
 
 const matchNode: NodeExecutor = {
     run({ node, ctx, edges }) {
-        const query = (() => {
+        const rawQuery = (() => {
             try {
                 const parsed = JSON.parse(String(node.data?.query ?? "{}"));
                 return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
@@ -112,6 +112,12 @@ const matchNode: NodeExecutor = {
                 return {};
             }
         })();
+        // Same {{field}} templating every other query/update-bearing node
+        // gets (Update One, Query, Mapper, ...) — otherwise a query like
+        // {"email": "{{email}}"} compares real documents against the
+        // literal 12-character string "{{email}}" and never matches
+        // anything.
+        const query = renderTemplateDeep(rawQuery, ctx) as Record<string, unknown>;
 
         // Handle array from Find: [{ _id, field1, field2, ... }, ...]
         if (Array.isArray(ctx.body)) {

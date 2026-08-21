@@ -107,9 +107,11 @@ export interface ModuleField {
     // does — it reads its target list off the previous node's data at
     // runtime instead (see lib-server/nodes/saveToList.ts).
     // "findFields" backs the field-selection checkboxes used by Project
-    // (reading the list off a chained Find node), and by Find and Find
-    // One themselves (reading their own list) — see ModuleEditor's
-    // dynamicOptions handling.
+    // (reading the list off a chained Find node), by Pass Through's
+    // "Fields to keep" (same lookup, but purely as a snapshot — see
+    // lib-server/nodes/passThrough.ts — it never filters anything the
+    // way Project does), and by Find and Find One themselves (reading
+    // their own list) — see ModuleEditor's dynamicOptions handling.
     dynamicOptions?: "lists" | "modules" | "findFields";
 }
 

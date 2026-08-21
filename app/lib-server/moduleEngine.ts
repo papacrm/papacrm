@@ -52,6 +52,7 @@ export async function runModule(
         clientStyles: [],
         clientScripts: [],
         stateValues: undefined,
+        heldFields: {},
     };
     let nodesRun = 0;
 

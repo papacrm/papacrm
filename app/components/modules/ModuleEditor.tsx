@@ -1301,12 +1301,16 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             </div>
 
                             {NODE_DEFS[selectedNode.type].fields.map((field) => {
-                                // The field-selection checkboxes live only on Project —
-                                // it reads the list schema off whichever data node feeds
-                                // it, walking back through any pass-through pipeline
-                                // nodes in between to find the actual source: List (by
-                                // id) or List (create if not exists)/Query (by
-                                // name-match against your Lists).
+                                // The field-selection checkboxes live on Project and on
+                                // Pass Through's "Fields to keep" — both read the list
+                                // schema off whichever data node feeds them, walking back
+                                // through any pass-through pipeline nodes in between to
+                                // find the actual source: List (by id) or List (create if
+                                // not exists)/Query (by name-match against your Lists).
+                                // Project uses the result to filter `selectedFields`; Pass
+                                // Through uses the identical lookup purely to offer field
+                                // names to snapshot into `keptFields` — see
+                                // lib-server/nodes/passThrough.ts.
                                 //
                                 // Find and Find One are pass-through for this purpose,
                                 // NOT a source, even though they're the node you'd
@@ -1319,7 +1323,11 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 // `sourceNode.data.list` off a node that never has that
                                 // field, so Find → Match → Project (the documented
                                 // pattern) never resolved any fields.
-                                if (field.kind === "select" && field.dynamicOptions === "findFields" && selectedNode.type === "project") {
+                                if (
+                                    field.kind === "select" &&
+                                    field.dynamicOptions === "findFields" &&
+                                    (selectedNode.type === "project" || selectedNode.type === "passThrough")
+                                ) {
                                     const PASSTHROUGH_TYPES: ModuleNodeType[] = ["match", "sort", "limit", "skip", "passThrough", "find", "findOne"];
                                     const ID_SOURCE_TYPES: ModuleNodeType[] = ["list"];
                                     const NAME_SOURCE_TYPES: ModuleNodeType[] = ["query", "listUpsert"];
@@ -1366,10 +1374,42 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                         }
                                     })();
 
+                                    // Project needs a real List schema to filter safely — a
+                                    // typo'd field name there just silently drops that field
+                                    // from every result. Pass Through has no such downside
+                                    // (it only ever snapshots what's actually there — see
+                                    // lib-server/nodes/passThrough.ts's readPath), so it
+                                    // still works with no List anywhere in the chain, e.g.
+                                    // right off a Function's input parameters or a Webhook's
+                                    // body: same as Console Log needing no config to show
+                                    // whatever's on ctx.body, Pass Through lets you just type
+                                    // the field name(s) you know are there.
+                                    const manualEntrySupported = selectedNode.type === "passThrough";
+
                                     return (
                                         <div key={field.key} className="flex flex-col gap-3">
                                             <Label>{field.label}</Label>
-                                            {!findNode ? (
+                                            {!findNode && manualEntrySupported ? (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <input
+                                                        type="text"
+                                                        value={selectedFields.join(", ")}
+                                                        onChange={(e) => {
+                                                            const updated = e.target.value
+                                                                .split(",")
+                                                                .map((f) => f.trim())
+                                                                .filter(Boolean);
+                                                            updateNodeData(selectedNode.id, field.key, JSON.stringify(updated));
+                                                        }}
+                                                        placeholder="e.g. userId, email"
+                                                        className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                                    />
+                                                    <p className="text-xs text-neutral-500">
+                                                        No List in this chain to read field names from — type the ones you know are there
+                                                        (comma-separated), e.g. whatever a Call node passed in from a Function's caller.
+                                                    </p>
+                                                </div>
+                                            ) : !findNode ? (
                                                 <p className="text-sm text-neutral-500">
                                                     Chain from a List, List (create if not exists), or Query node — Find/Find One/Match/Sort/Limit/Skip in
                                                     between are fine too — to see fields

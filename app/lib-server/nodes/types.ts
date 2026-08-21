@@ -145,6 +145,17 @@ export interface NodeContext {
     // lib/nodes/state.ts. Overwritten (not merged) each time a State node
     // runs.
     stateValues?: { nodeId: string; data: Record<string, string> };
+    // Values snapshotted by a Pass Through node (lib/nodes/passThrough.ts)
+    // via its "Fields to keep" picker. `body` gets reassigned wholesale by
+    // nodes like Find/List/Project as a chain runs, so a field that was
+    // present earlier can simply be gone from `body` by the time a later
+    // node wants it — this is the side channel that keeps it around
+    // regardless. Flat and shared across branches, same spirit as
+    // responseHeaders/setCookies: each Pass Through node merges its
+    // snapshotted values in (last one wins on a key collision), and
+    // `renderTemplate`/`readPath` below fall back to it whenever a
+    // `{{field}}` isn't found on the current `body` or `query`.
+    heldFields: Record<string, unknown>;
 }
 
 export type NodeOutcome =
@@ -280,11 +291,13 @@ export function readPath(source: unknown, path: string): unknown {
 
 // Replaces every `{{ some.path }}` in `template` with the matching value
 // read from the node context — checks the current body first (e.g. a
-// submitted form field), then the query string. Used by nodes like Static
-// Page and HTTP Request so they can use data an earlier node collected.
+// submitted form field), then the query string, then anything a Pass
+// Through node further back in the chain snapshotted into `heldFields`
+// before `body` moved on without it. Used by nodes like Static Page and
+// HTTP Request so they can use data an earlier node collected.
 export function renderTemplate(template: string, ctx: NodeContext): string {
     return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path) => {
-        const value = readPath(ctx.body, path) ?? readPath(ctx.query, path);
+        const value = readPath(ctx.body, path) ?? readPath(ctx.query, path) ?? readPath(ctx.heldFields, path);
         return value === undefined || value === null ? "" : String(value);
     });
 }
