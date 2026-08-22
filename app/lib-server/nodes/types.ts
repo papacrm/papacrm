@@ -286,6 +286,29 @@ export function uniqueIncomingSources(edges: IModuleEdge[], nodeId: string): str
     return Array.from(new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source)));
 }
 
+// Round-trips ctx.nodeOutputs across the separate HTTP requests a
+// multi-step Input Form chain makes. Each step (see the __node doc in
+// ../moduleEngine.ts) is its own fresh request with its own empty
+// nodeOutputs, so a "data" edge sourced from an *earlier* step's Input
+// Form (see dataEdgeSources above) would otherwise find nothing there by
+// the time a later step's page actually renders or submits — that
+// earlier node doesn't run again this request. A hidden "__carry" field
+// (see inputForm.ts and WebhookInputForm.tsx) threads the previous
+// request's ctx.nodeOutputs through each submission so moduleEngine.ts
+// can restore it before the next node runs. Same spirit as "__node" for
+// routing, but for data rather than which node to resume at.
+export function decodeCarry(raw: unknown): Record<string, unknown> {
+    if (typeof raw !== "string" || !raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        // Malformed/tampered __carry — proceed with nothing restored
+        // rather than failing the whole request.
+        return {};
+    }
+}
+
 export function readPath(source: unknown, path: string): unknown {
     if (!source || !path) return undefined;
     return path.split(".").reduce<any>((acc, key) => (acc == null ? undefined : acc[key]), source);

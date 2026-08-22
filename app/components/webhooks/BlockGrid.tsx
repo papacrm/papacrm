@@ -37,7 +37,7 @@ type ViewBlock =
           fields: { key: string; label: string }[];
           items: { _id: string; title: string; subtitle: string; body: string; data: Record<string, any> }[];
       }
-    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; nodeId: string }
+    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: InputFormField[]; nodeId: string; carry: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string; className?: string; style?: string }
@@ -95,7 +95,7 @@ function BlockContent({ block }: { block: ViewBlock }) {
                     {block.type === "form" && (
                         <>
                             {block.title && <p className="mb-3 text-sm text-neutral-600">{block.title}</p>}
-                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} nodeId={block.nodeId} />
+                            <WebhookInputForm fields={block.fields} submitLabel={block.submitLabel} nodeId={block.nodeId} carry={block.carry} />
                         </>
                     )}
                     {block.type === "page" && <div dangerouslySetInnerHTML={{ __html: block.html }} />}

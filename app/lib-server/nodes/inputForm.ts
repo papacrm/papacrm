@@ -64,6 +64,12 @@ const inputFormNode: NodeExecutor = {
                             submitLabel: String(node.data?.submitLabel ?? "Submit"),
                             fields: parseFields(node),
                             nodeId: node.id,
+                            // Everything collected so far this chain (see
+                            // decodeCarry's doc in ./types.ts), so this
+                            // form's own submission can hand it back and
+                            // a later step's data edge from an earlier
+                            // form still has something to read.
+                            carry: JSON.stringify(ctx.nodeOutputs),
                         },
                     },
                 },

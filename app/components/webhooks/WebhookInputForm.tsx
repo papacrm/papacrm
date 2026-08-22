@@ -10,6 +10,13 @@ interface WebhookInputFormProps {
   // Webhook → Input Form → Input Form chain shares one URL. See
   // runModule in ../../lib-server/moduleEngine.ts.
   nodeId: string;
+  // Everything an earlier step of this same chain already collected,
+  // JSON-stringified — see decodeCarry's doc in
+  // ../../lib-server/nodes/types.ts. Submitted back as a hidden field so
+  // a "data" edge sourced from that earlier step still has something to
+  // read once this form's own submission starts a fresh request.
+  // Optional/defaults to "{}" for callers (e.g. tests) that don't pass it.
+  carry?: string;
 }
 
 // NOTE on why this isn't a `"use client"` component, and how the
@@ -39,7 +46,7 @@ interface WebhookInputFormProps {
 // unavailable, or the fetch fails, the form still works: it's a real
 // `<form method="POST">` and falls back to a normal (full-reload)
 // submission.
-export default function WebhookInputForm({ fields, submitLabel, nodeId }: WebhookInputFormProps) {
+export default function WebhookInputForm({ fields, submitLabel, nodeId, carry }: WebhookInputFormProps) {
   useHtml({
     script: [
       {
@@ -188,6 +195,7 @@ export default function WebhookInputForm({ fields, submitLabel, nodeId }: Webhoo
   return (
     <form method="POST" data-webhook-form className="flex flex-col gap-4" noValidate>
       <input type="hidden" name="__node" value={nodeId} />
+      <input type="hidden" name="__carry" value={carry ?? "{}"} />
       <div data-form-error className="text-sm text-red-600" role="alert" />
       {fields.map((field) => (
         <div key={field.name} className="flex flex-col gap-1.5">

@@ -1,6 +1,6 @@
 import type { IModuleNode, IModuleEdge } from "./models/Module";
 import { NODE_EXECUTORS } from "./nodes";
-import { dataEdgeSources, MAX_NODES, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
+import { dataEdgeSources, decodeCarry, MAX_NODES, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
 
 export type { WebhookTrigger, ModuleResult };
 
@@ -55,6 +55,12 @@ export async function runModule(
         heldFields: {},
         nodeOutputs: {},
     };
+    // Restore whatever earlier steps of a multi-request Input Form chain
+    // already produced (see decodeCarry's doc in ./nodes/types.ts) so a
+    // "data" edge sourced from a node that ran on a *previous* request —
+    // not this one — can still supply its fields to whatever it's wired
+    // into here.
+    Object.assign(ctx.nodeOutputs, decodeCarry((trigger.body as any)?.__carry));
     let nodesRun = 0;
 
     // A form submission (see lib/nodes/inputForm.ts / WebhookInputForm.tsx)

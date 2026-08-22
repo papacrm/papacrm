@@ -106,7 +106,7 @@ export type ViewBlock =
     | { type: "table"; pos: ViewBlockPosition; fields: { key: string; label: string }[]; documents: { _id: string; data: Record<string, any> }[] }
     | { type: "listView"; pos: ViewBlockPosition; title: string; fields: TableField[]; items: ListViewItem[] }
     | { type: "card"; pos: ViewBlockPosition; title: string; fields: TableField[]; items: CardItem[] }
-    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; nodeId: string }
+    | { type: "form"; pos: ViewBlockPosition; title: string; submitLabel: string; fields: ReturnType<typeof parseFields>; nodeId: string; carry: string }
     | { type: "page"; pos: ViewBlockPosition; title: string; html: string }
     | { type: "gap"; pos: ViewBlockPosition; size: number }
     | { type: "label"; pos: ViewBlockPosition; text: string; className?: string; style?: string }
@@ -344,6 +344,10 @@ async function resolveChildren(view: IModuleNode, nodes: IModuleNode[], edges: I
                 submitLabel: String(child.data?.submitLabel ?? "Submit"),
                 fields: parseFields(child),
                 nodeId: child.id,
+                // Same reasoning as the standalone Input Form's own
+                // render — see the "carry" doc in ./inputForm.ts and
+                // decodeCarry in ./types.ts.
+                carry: JSON.stringify(ctx.nodeOutputs),
             });
         } else if (child.type === "view") {
             const nestedBlocks = await resolveChildren(child, nodes, edges, ctx, depth + 1);
@@ -447,7 +451,7 @@ async function resolveChildren(view: IModuleNode, nodes: IModuleNode[], edges: I
 }
 
 const viewNode: NodeExecutor = {
-    async run({ node, ctx, edges, nodes }) {
+    async run({ node, ctx, edges, nodes, trigger }) {
         // A View that's chained into another View (its output wired into
         // that View's input — the very same edge that makes it show up as
         // a block in that View's Layout, see resolveChildren above) acts
@@ -507,13 +511,38 @@ const viewNode: NodeExecutor = {
             ctx.stateValues = undefined; // Clear after use
         }
 
-        if (nextNodeIds.length > 0) {
-            // Chained into something other than a View — most commonly a
-            // Call node that calls a shared layout's Function (see the
-            // "slot" doc on ViewBlock above and lib/nodes/call.ts). Stash
-            // this View's own rendered output, keyed by its own id, then
-            // keep going instead of answering with it directly — whatever
-            // this chains into decides what actually becomes the response.
+        // A View -> Call edge is the shared-layout case (see the "slot"
+        // doc on ViewBlock above and lib/nodes/call.ts, the only place
+        // ctx.viewOutput is ever read): the Call's called Function
+        // forwards into a layout View with this View wired in as a slot.
+        // That's a page-composition relationship, not a "was something
+        // submitted" one, so it passes through regardless of request
+        // method — a fresh GET of the page still needs to reach the Call
+        // to compose the layout.
+        const nextIsCall = nextNodeIds.length > 0 && nextNodeIds.every((id) => nodes.find((n) => n.id === id)?.type === "call");
+
+        // Any other next node (a Static Page, an Input Form meant as a
+        // separate follow-up step, etc.) only means "move on" once this
+        // View was actually reached as the continuation of a submission —
+        // i.e. a POST, same as everywhere else a submission is told apart
+        // from a plain visit (see the isEntry/method doc in
+        // lib/nodes/inputForm.ts). A plain GET is a fresh visit to this
+        // page: render it and wait, exactly like a bare Input Form does,
+        // regardless of what's wired after it. Without this GET check,
+        // this View — and any Input Form embedded in it (see
+        // EMBEDDABLE_TYPES above) — would never actually be shown: it'd
+        // always skip straight to whatever's next. Without the *method*
+        // check specifically (i.e. treating every visit as "move on"),
+        // this View would also never actually be shown even once — the
+        // embedded form's own submission bubbling back through this same
+        // node would only ever bounce straight past it again, looking
+        // like the page is stuck reloading itself.
+        const isContinuation = trigger.method.toUpperCase() !== "GET";
+        if (nextIsCall || (isContinuation && nextNodeIds.length > 0)) {
+            // Stash this View's own rendered output, keyed by its own id,
+            // then keep going instead of answering with it directly —
+            // whatever this chains into decides what actually becomes
+            // the response.
             ctx.viewOutput[node.id] = { title, blocks };
             return { done: false, nextNodeIds };
         }
