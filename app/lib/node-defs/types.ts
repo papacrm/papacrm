@@ -90,6 +90,24 @@ export interface ModuleEdge {
     source: string;
     sourceHandle: string | null;
     target: string;
+    // "workflow" (the default — omitted/undefined edges are workflow
+    // edges too, so existing saved modules don't need a migration) is a
+    // normal connection: reaching the source's end of it runs the
+    // target, exactly as edges always have. "data" is a supply-only
+    // connection: it never triggers the target on its own — instead,
+    // whenever the target *does* run (via one of its workflow edges),
+    // the engine looks up whatever that data edge's source last
+    // produced and merges those fields onto the target's incoming body
+    // first (see NodeContext.nodeOutputs and the merge step in
+    // moduleEngine.ts's executeAndContinue). This replaces the old
+    // per-node "Multiple inputs: Continue/Wait" join picker — a node
+    // no longer needs to wait for every predecessor, it just runs
+    // whenever a workflow edge reaches it and picks up whatever data
+    // edges have already produced by then. On a field-name collision
+    // between the incoming body and a data edge (or between two data
+    // edges), the data edge's value wins — same "last one wins" spirit
+    // the old Wait-join merge had, just without needing to wait.
+    edgeType?: "workflow" | "data";
 }
 
 export interface ModuleField {

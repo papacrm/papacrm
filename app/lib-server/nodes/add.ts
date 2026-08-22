@@ -1,4 +1,4 @@
-import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, uniqueIncomingSources, type NodeExecutor } from "./types";
+import { nextEdgeTargets, readPath, uniqueIncomingSources, type NodeExecutor } from "./types";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -15,26 +15,28 @@ const addNode: NodeExecutor = {
         const incomingSourceIds = uniqueIncomingSources(edges, node.id);
 
         let total: number;
-        if (incomingSourceIds.length >= 2 && isJoinBody(ctx.body, incomingSourceIds)) {
-            // 2+ inputs: Add always waits for every one of them — see
-            // lib/node-defs/add.ts's defaultData, where joinMode is fixed
-            // to "wait" and never exposed as a toggle, since summing only
-            // makes sense once every input has actually arrived. Reads
-            // one number per input — the field named for that source in
-            // "sumFields" (set per-input in the inspector), or that
-            // input's own value if left blank for that source.
-            const parts = ctx.body as Record<string, unknown>;
+        if (incomingSourceIds.length >= 2) {
+            // 2+ inputs: sum one number per predecessor, reading each
+            // one's own last output straight off ctx.nodeOutputs (see
+            // NodeContext.nodeOutputs in ./types) rather than the current
+            // ctx.body — Add needs every source's value kept separate
+            // (they may all use the same field name, e.g. "amount"), so
+            // it can't rely on the generic data-edge merge every other
+            // node uses, which would just overwrite same-named fields
+            // instead of summing them. This runs whenever Add itself is
+            // triggered, using whichever of its predecessors have
+            // produced something by then — a source that hasn't run yet
+            // this request simply contributes 0, rather than blocking for
+            // it. Reads one number per source — the field named for that
+            // source in "sumFields" (set per-input in the inspector), or
+            // that source's own last output value directly if left blank.
             const sumFields = (node.data?.sumFields ?? {}) as Record<string, string>;
             total = incomingSourceIds.reduce((sum, id) => {
+                const produced = ctx.nodeOutputs[id];
                 const fieldName = String(sumFields[id] ?? "").trim();
-                const value = fieldName ? readPath(parts[id], fieldName) : parts[id];
+                const value = fieldName ? readPath(produced, fieldName) : produced;
                 return sum + toNumber(value);
             }, 0);
-            // Flatten the join body back into one plain object for
-            // whatever's chained after this, same as Mapper/JSON/
-            // Condition do — so a downstream node can just use {{field}}
-            // instead of needing a source node's id.
-            ctx.body = flattenJoinBody(parts);
         } else {
             // 0 or 1 input: read one number — via "Field" if set, else
             // the whole input value — and add the literal "Number" box

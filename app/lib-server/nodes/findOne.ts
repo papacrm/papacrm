@@ -1,142 +1,81 @@
-import { readPath, nextEdgeTargets, renderTemplateDeep, type NodeExecutor } from "./types";
+import { connectDB } from "../mongoose";
+import List from "../models/List";
+import Module from "../models/Module";
+import { findOneDocument, resolveMatchPushdown } from "./listData";
+import { nextEdgeTargets, type NodeExecutor } from "./types";
 
-// Numeric-aware equality, mirroring Condition's looseEquals (see
-// ./condition.ts): "5" == 5 the way a low-code user expects, falling back
-// to a plain string compare when either side isn't numeric.
-function toNumberOrNaN(v: unknown): number {
-    if (typeof v === "number") return v;
-    if (typeof v === "string" && v.trim() !== "") return Number(v);
-    return NaN;
-}
+// See ./find.ts, which this deliberately mirrors — same two input shapes,
+// same DB-level Match pushdown, same ownership check. The only real
+// difference is calling findOneDocument (a real ListDocument.findOne())
+// instead of findDocuments, and returning one flat record instead of an
+// array.
+const findOneNode: NodeExecutor = {
+    async run({ node, ctx, edges, nodes }) {
+        const nextNodeIds = nextEdgeTargets(node, edges);
 
-function looseEquals(a: unknown, b: unknown): boolean {
-    const na = toNumberOrNaN(a);
-    const nb = toNumberOrNaN(b);
-    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na === nb;
-    return String(a ?? "") === String(b ?? "");
-}
-
-function compareNumeric(op: "$gt" | "$gte" | "$lt" | "$lte", docValue: unknown, queryValue: unknown): boolean {
-    const a = toNumberOrNaN(docValue);
-    const b = toNumberOrNaN(queryValue);
-    if (Number.isNaN(a) || Number.isNaN(b)) return false;
-    switch (op) {
-        case "$gt":
-            return a > b;
-        case "$gte":
-            return a >= b;
-        case "$lt":
-            return a < b;
-        case "$lte":
-            return a <= b;
-    }
-}
-
-// Evaluates one field's condition against a document value. `condition` is
-// either a plain value — exact/loose match, e.g. "status": "active" — or
-// an operator object, MongoDB-style, e.g. "age": { "$gt": 3, "$lte": 65 }.
-// Previously this node only ever did `doc[key] !== value`, so an operator
-// object never matched anything (or, if the JSON failed to parse at all,
-// silently fell back to `{}` and matched *everything* — see the query
-// parsing below for that half of the fix).
-function matchesCondition(docValue: unknown, condition: unknown): boolean {
-    if (condition !== null && typeof condition === "object" && !Array.isArray(condition)) {
-        for (const [op, opValue] of Object.entries(condition as Record<string, unknown>)) {
-            switch (op) {
-                case "$gt":
-                case "$gte":
-                case "$lt":
-                case "$lte":
-                    if (!compareNumeric(op, docValue, opValue)) return false;
-                    break;
-                case "$eq":
-                    if (!looseEquals(docValue, opValue)) return false;
-                    break;
-                case "$ne":
-                    if (looseEquals(docValue, opValue)) return false;
-                    break;
-                case "$in":
-                    if (!Array.isArray(opValue) || !opValue.some((v) => looseEquals(docValue, v))) return false;
-                    break;
-                case "$nin":
-                    if (Array.isArray(opValue) && opValue.some((v) => looseEquals(docValue, v))) return false;
-                    break;
-                case "$exists": {
-                    const has = docValue !== undefined && docValue !== null && docValue !== "";
-                    if (has !== Boolean(opValue)) return false;
-                    break;
-                }
-                case "$regex":
-                    try {
-                        if (!new RegExp(String(opValue)).test(String(docValue ?? ""))) return false;
-                    } catch {
-                        return false;
-                    }
-                    break;
-                default:
-                    // Unrecognized key starting without $ (or an unknown
-                    // operator) — fall back to comparing the whole object
-                    // as a literal value rather than silently passing.
-                    if (!looseEquals(docValue, condition)) return false;
-                    break;
-            }
-        }
-        return true;
-    }
-
-    return looseEquals(docValue, condition);
-}
-
-function matchesQuery(doc: Record<string, any>, query: Record<string, any>): boolean {
-    for (const [key, condition] of Object.entries(query)) {
-        if (!matchesCondition(readPath(doc, key), condition)) return false;
-    }
-    return true;
-}
-
-const matchNode: NodeExecutor = {
-    run({ node, ctx, edges }) {
-        const rawQuery = (() => {
-            try {
-                const parsed = JSON.parse(String(node.data?.query ?? "{}"));
-                return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-            } catch {
-                // Malformed JSON (e.g. unquoted keys like `{ $gt: 3 }`,
-                // which isn't valid JSON even though it looks like one)
-                // used to silently become `{}` here, which matches every
-                // document — the filter looked like it was "on" but did
-                // nothing. Keep the graceful fallback (don't fail the run
-                // over a typo) but surface it via ctx.body/rerender is out
-                // of scope here; the field's own JSON textarea validates
-                // on save in the editor.
-                return {};
-            }
-        })();
-        // Same {{field}} templating every other query/update-bearing node
-        // gets (Update One, Query, Mapper, ...) — otherwise a query like
-        // {"email": "{{email}}"} compares real documents against the
-        // literal 12-character string "{{email}}" and never matches
-        // anything.
-        const query = renderTemplateDeep(rawQuery, ctx) as Record<string, unknown>;
-
-        // Handle array from Find: [{ _id, field1, field2, ... }, ...]
+        // Mode 2 (per this node's own inspector tip): chained after Find
+        // or Match, so ctx.body is already an array of fetched/filtered
+        // documents — [{ _id, field1, field2, ... }, ...]. No DB
+        // round-trip needed, just take the first one. This is also the
+        // only mode with full operator support for the query that
+        // produced it, since Match already ran in-memory over every
+        // document — see resolveMatchPushdown's own comment in
+        // ./listData.ts for the DB-level shortcut's narrower support.
         if (Array.isArray(ctx.body)) {
-            ctx.body = ctx.body.filter((doc: any) => matchesQuery(doc, query));
-        }
-        // Pass through { listId, fields } unchanged - it's metadata from List/ListUpsert for Find/FindOne
-        else if (ctx.body && typeof ctx.body === "object" && "listId" in ctx.body && !("_id" in ctx.body)) {
-            // Do nothing - pass through unchanged so List → Match → Find/FindOne works
-            // (Find/FindOne will apply the filter at DB level)
-        }
-        // Handle flat record from Find One: { _id, field1, field2, ... }
-        else if (ctx.body && typeof ctx.body === "object") {
-            if (!matchesQuery(ctx.body as any, query)) {
-                ctx.body = null;
-            }
+            ctx.body = ctx.body.length > 0 ? ctx.body[0] : null;
+            return { done: false, nextNodeIds };
         }
 
-        return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
+        // Mode 1: chained straight from List/List (create if not exists),
+        // so ctx.body is still just { listId, fields, ... } list metadata
+        // — nothing's been queried yet. Go straight to the DB for a
+        // single document via a real findOne().
+        const listId = String((ctx.body as any)?.listId ?? "").trim();
+        if (!listId) {
+            ctx.body = null;
+            return { done: false, nextNodeIds };
+        }
+
+        try {
+            await connectDB();
+            const module = await Module.findById(ctx.moduleId).select("owner").lean();
+            if (!module) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
+            }
+
+            const list = await List.findById(listId).lean();
+            if (!list || String((list as any).owner) !== String((module as any).owner)) {
+                ctx.body = null;
+                return { done: false, nextNodeIds };
+            }
+
+            // Same smart-filtering shortcut as Find — see
+            // resolveMatchPushdown's own comment in ./listData.ts for
+            // exactly how (and why) it renders Match's query the same way
+            // Match itself would once it actually runs. If Match's query
+            // can't be pushed down (an operator condition, or more than
+            // one field), this falls back to an unfiltered findOne(),
+            // same known limitation Find has for its own DB-level
+            // shortcut. The documented, fully-correct way to filter by
+            // anything more than one exact field is Mode 2 above: List →
+            // Find → Match → Find One.
+            const pushdown = resolveMatchPushdown(nextNodeIds, nodes, edges, ctx);
+            const doc = await findOneDocument(list, pushdown?.field ?? "", pushdown?.operator ?? "equals", pushdown?.value ?? "");
+
+            // Same flat shape Find hands each array entry — { _id,
+            // field1, field2, ... } — so a node right after this one
+            // reads {{fieldName}} exactly like it would from any other
+            // single-document source (Save to List, Update One, ...).
+            ctx.body = doc
+                ? { ...doc.data, _id: doc._id, ...(doc.createdAt && { createdAt: doc.createdAt }), ...(doc.updatedAt && { updatedAt: doc.updatedAt }) }
+                : null;
+        } catch {
+            ctx.body = null;
+        }
+
+        return { done: false, nextNodeIds };
     },
 };
 
-export default matchNode;
+export default findOneNode;

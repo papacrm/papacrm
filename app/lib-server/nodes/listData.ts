@@ -2,7 +2,8 @@ import { connectDB } from "../mongoose";
 import List from "../models/List";
 import ListDocument from "../models/ListDocument";
 import Module from "../models/Module";
-import { readPath } from "./types";
+import type { IModuleNode, IModuleEdge } from "../models/Module";
+import { dataEdgeSources, readPath, renderTemplate, type NodeContext } from "./types";
 
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
 // A module-rendered page, not the Lists admin screen — cap how many rows
@@ -159,4 +160,69 @@ export async function findDocuments(
         .limit(MAX_ROWS)
         .lean();
     return docs.map((d: any) => ({ _id: String(d._id), data: d.data ?? {}, createdAt: d.createdAt, updatedAt: d.updatedAt }));
+}
+
+// Shared by Find and Find One (./find.ts, ./findOne.ts): when the node
+// they're about to hand results to is a Match with a single-field exact-
+// equality query, extract that as a { field, operator, value } triple so
+// the DB query itself can do the filtering instead of pulling every
+// document into memory first — see buildWhereQuery's own comment for why
+// an operator condition (e.g. "$gt") can't be expressed this way and
+// falls back to Match filtering in memory instead.
+//
+// The extracted value is run through the exact same {{field}} templating
+// Match's own renderTemplateDeep applies when it actually runs (see
+// ./match.ts) — including merging in whatever any "data" edges into
+// *Match itself* would supply, mirroring the merge step moduleEngine.ts
+// does for every node right before it runs (see dataEdgeSources/
+// ctx.nodeOutputs in ./types). That merge matters here specifically: in a
+// chain like Input Form → (workflow) → List Upsert → (workflow) → Find
+// One → (workflow) → Match, with Input Form → Match wired as a *data*
+// edge, Match's own query — say {"email": "{{email}}"} — depends on a
+// field that only ever reaches Match via that data edge; it was never on
+// Find One's own ctx.body. Rendering the template against Find/Find One's
+// own ctx (which is what this used to do) would resolve {{email}} to an
+// empty string, sending the DB a query for `email === ""` — a filter
+// that's *syntactically* fine but semantically wrong, so it either
+// matches nothing (Find One) or matches the wrong thing entirely. Look
+// ahead to what Match will actually see instead, so the DB-level
+// shortcut matches exactly what the in-memory fallback (Match filtering
+// everything itself) would have matched anyway.
+export function resolveMatchPushdown(
+    nextNodeIds: string[],
+    nodes: IModuleNode[],
+    edges: IModuleEdge[],
+    ctx: NodeContext,
+): { field: string; operator: string; value: string } | null {
+    if (nextNodeIds.length !== 1) return null;
+    const nextNode = nodes.find((n) => n.id === nextNodeIds[0]);
+    if (nextNode?.type !== "match") return null;
+
+    const query = (() => {
+        try {
+            const parsed = JSON.parse(String(nextNode.data?.query ?? "{}"));
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+            return {};
+        }
+    })();
+
+    const entries = Object.entries(query as Record<string, unknown>);
+    if (entries.length !== 1 || entries[0][1] === null || typeof entries[0][1] === "object") return null;
+    const [field, rawValue] = entries[0];
+
+    const dataSources = dataEdgeSources(nextNode.id, edges);
+    let effectiveCtx = ctx;
+    if (dataSources.length) {
+        const merged: Record<string, unknown> =
+            ctx.body && typeof ctx.body === "object" && !Array.isArray(ctx.body) ? { ...ctx.body } : {};
+        for (const sourceId of dataSources) {
+            const produced = ctx.nodeOutputs[sourceId];
+            if (produced && typeof produced === "object" && !Array.isArray(produced)) Object.assign(merged, produced);
+        }
+        effectiveCtx = { ...ctx, body: merged };
+    }
+
+    const value = typeof rawValue === "string" ? renderTemplate(rawValue, effectiveCtx) : String(rawValue);
+    return { field, operator: "equals", value };
 }

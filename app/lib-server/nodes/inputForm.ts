@@ -69,10 +69,26 @@ const inputFormNode: NodeExecutor = {
                 },
             };
         }
-        // This form's own submission: fold the submitted fields into the
+        // This form's own submission: fold its declared fields into the
         // context body and carry on down the chain, same as a webhook
-        // trigger firing.
-        ctx.body = trigger.body ?? ctx.body;
+        // trigger firing. Deliberately builds a fresh object from just
+        // this form's own field names rather than assigning trigger.body
+        // wholesale — trigger.body is the raw POST, which also carries the
+        // hidden "__node" field (see the isEntry doc above and
+        // WebhookInputForm.tsx's hidden input) used only to route this
+        // submission to this node. That's routing plumbing, not form data:
+        // if it leaked through onto ctx.body, it would also become this
+        // node's recorded ctx.nodeOutputs entry (see moduleEngine.ts),
+        // and from there get merged onto anything wired to this node via a
+        // "data" edge — e.g. a Match node reading {{email}} would
+        // silently also pick up a stray "__node" field alongside it.
+        const fields = parseFields(node);
+        const rawBody = (trigger.body ?? {}) as Record<string, unknown>;
+        const submitted: Record<string, unknown> = {};
+        for (const field of fields) {
+            if (field.name) submitted[field.name] = rawBody[field.name];
+        }
+        ctx.body = submitted;
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };
     },
 };

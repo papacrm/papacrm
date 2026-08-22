@@ -1,6 +1,6 @@
 import type { IModuleNode, IModuleEdge } from "./models/Module";
 import { NODE_EXECUTORS } from "./nodes";
-import { MAX_NODES, uniqueIncomingSources, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
+import { dataEdgeSources, MAX_NODES, type NodeContext, type WebhookTrigger, type ModuleResult } from "./nodes/types";
 
 export type { WebhookTrigger, ModuleResult };
 
@@ -53,6 +53,7 @@ export async function runModule(
         clientScripts: [],
         stateValues: undefined,
         heldFields: {},
+        nodeOutputs: {},
     };
     let nodesRun = 0;
 
@@ -76,55 +77,13 @@ export async function runModule(
     // Project reads and reassigns (ctx.body, and ctx.body.documents in
     // particular). Everything else on NodeContext (responseHeaders,
     // setCookies, slotContent, slotBlocks, viewOutput, htmlAttrs,
-    // clientStyles, clientScripts) stays intentionally shared across
-    // branches — see their field comments in ./nodes/types.ts — this only
-    // isolates the one field that downstream nodes filter/replace in
-    // place.
+    // clientStyles, clientScripts, nodeOutputs) stays intentionally shared
+    // across branches — see their field comments in ./nodes/types.ts —
+    // this only isolates the one field that downstream nodes filter/
+    // replace in place.
     function cloneBody(body: NodeContext["body"]): NodeContext["body"] {
         if (body === null || typeof body !== "object") return body;
         return typeof structuredClone === "function" ? structuredClone(body) : JSON.parse(JSON.stringify(body));
-    }
-
-    // Precomputed once for the whole run — the graph itself never changes
-    // mid-run, so there's no need to rescan `edges` on every arrival.
-    const incomingSources = new Map<string, string[]>(nodes.map((n) => [n.id, uniqueIncomingSources(edges, n.id)]));
-
-    // A node with 2+ distinct incoming sources whose own data opts it into
-    // "wait" (`joinMode: "wait"`, set from the inspector — see
-    // ModuleEditor's "Multiple inputs" picker) becomes a real join: every
-    // branch that reaches it records its own data here, namespaced by
-    // which predecessor it arrived from (`{ [sourceNodeId]: body }`), and
-    // the node only actually runs once — either the moment every expected
-    // predecessor has shown up, or (see JOIN_TIMEOUT_MS below) once it's
-    // waited long enough that any still-missing one almost certainly isn't
-    // coming, e.g. the untaken side of a Condition. `resolve` is how every
-    // branch that reached this same join — not just whichever one
-    // triggered the actual run — ends up with that one shared result
-    // instead of the node running again for each of them.
-    interface JoinState {
-        arrived: Map<string, unknown>;
-        settled: boolean;
-        promise: Promise<ModuleResult | undefined>;
-        resolve: (result: ModuleResult | undefined) => void;
-        timer: ReturnType<typeof setTimeout>;
-    }
-    const joinStates = new Map<string, JoinState>();
-    const JOIN_TIMEOUT_MS = 5000;
-
-    function settleJoin(nodeId: string, state: JoinState) {
-        if (state.settled) return;
-        state.settled = true;
-        clearTimeout(state.timer);
-
-        const node = nodeById.get(nodeId);
-        if (!node || nodesRun >= MAX_NODES) {
-            state.resolve(undefined);
-            return;
-        }
-        nodesRun++;
-        const merged: Record<string, unknown> = {};
-        for (const [src, body] of state.arrived) merged[src] = body;
-        executeAndContinue(node, { ...ctx, body: merged }, false).then(state.resolve);
     }
 
     // Runs one node's executor and, unless it produced a result itself,
@@ -139,11 +98,39 @@ export async function runModule(
     // via Promise.all. Only one HTTP response can ever be sent, so once
     // every branch has finished, the first one that actually produced a
     // result (not just a side effect) wins.
+    //
+    // Before the executor actually runs, this also folds in whatever any
+    // "data" edges into this node last produced (see dataEdgeSources and
+    // NodeContext.nodeOutputs in ./nodes/types.ts) — this is what replaced
+    // the old per-node "Multiple inputs: Continue/Wait" join picker. A
+    // node no longer needs to wait for every predecessor to run it once
+    // with everything combined; it just runs whenever a *workflow* edge
+    // reaches it (same as it always has, once per triggering edge), and
+    // picks up whatever data edges have already produced by then — nothing
+    // if that source hasn't run yet this request, its last output
+    // otherwise. On a field-name collision, a data edge's value overwrites
+    // whatever's already on the incoming body, and a later data edge (in
+    // the order its edge appears in `edges`) overwrites an earlier one.
     async function executeAndContinue(node: IModuleNode, execCtx: NodeContext, isEntry: boolean): Promise<ModuleResult | undefined> {
         const executor = NODE_EXECUTORS[node.type];
         if (!executor) return undefined;
 
+        const dataSources = dataEdgeSources(node.id, edges);
+        if (dataSources.length) {
+            const merged: Record<string, unknown> =
+                execCtx.body && typeof execCtx.body === "object" && !Array.isArray(execCtx.body) ? { ...execCtx.body } : {};
+            for (const sourceId of dataSources) {
+                const produced = ctx.nodeOutputs[sourceId];
+                if (produced && typeof produced === "object" && !Array.isArray(produced)) Object.assign(merged, produced);
+            }
+            execCtx.body = merged;
+        }
+
         const outcome = await executor.run({ node, ctx: execCtx, trigger, edges, nodes, isEntry });
+        // Recorded regardless of whether this node ends the run or
+        // continues on — a data edge downstream should still be able to
+        // read whatever a terminal node (e.g. Save to List) last produced.
+        ctx.nodeOutputs[node.id] = execCtx.body;
         if (outcome.done) return outcome.result;
 
         // Every node reached from here on is a *chained* node, not the
@@ -160,62 +147,19 @@ export async function runModule(
         // next node is just this branch continuing its own chain, so it
         // keeps sharing `execCtx` unchanged (no clone needed).
         const forkedCtxFor = (id: string) => (outcome.nextNodeIds.length > 1 ? { ...execCtx, body: cloneBody(execCtx.body) } : execCtx);
-        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false, forkedCtxFor(id), node.id)));
+        const branchResults = await Promise.all(outcome.nextNodeIds.map((id) => runFrom(id, false, forkedCtxFor(id))));
         return branchResults.find((r) => r && r.kind !== "empty") ?? branchResults.find((r) => r !== undefined);
     }
 
-    // `fromNodeId` is the node whose edge led here — undefined only for
-    // the run's own entry node, which by definition can't be a join.
-    async function runFrom(nodeId: string, isEntry: boolean, branchCtx: NodeContext, fromNodeId?: string): Promise<ModuleResult | undefined> {
+    async function runFrom(nodeId: string, isEntry: boolean, branchCtx: NodeContext): Promise<ModuleResult | undefined> {
         if (nodesRun >= MAX_NODES) return undefined; // guards against cycles
 
         const node = nodeById.get(nodeId);
         if (!node) return undefined;
         if (!NODE_EXECUTORS[node.type]) return undefined;
 
-        const sources = incomingSources.get(nodeId) ?? [];
-        const isWaitJoin = fromNodeId !== undefined && sources.length > 1 && String((node.data as any)?.joinMode ?? "continue") === "wait";
-
-        if (!isWaitJoin) {
-            nodesRun++;
-            return executeAndContinue(node, branchCtx, isEntry);
-        }
-
-        // Join: record this branch's contribution, namespaced by the node
-        // it arrived from rather than merged flat, so two inputs with the
-        // same field name don't clobber each other — a downstream
-        // {{field}} template reads a specific one via
-        // {{sourceNodeId.field}} (readPath in ./nodes/types.ts already
-        // walks dotted paths, so this needs no template-syntax changes).
-        let state = joinStates.get(nodeId);
-        if (!state) {
-            let resolve!: (result: ModuleResult | undefined) => void;
-            const promise = new Promise<ModuleResult | undefined>((res) => {
-                resolve = res;
-            });
-            const newState: JoinState = {
-                arrived: new Map(),
-                settled: false,
-                promise,
-                resolve,
-                timer: setTimeout(() => settleJoin(nodeId, newState), JOIN_TIMEOUT_MS),
-            };
-            // Never block the process/request from otherwise finishing on
-            // its own just because this timer is still pending.
-            if (typeof newState.timer.unref === "function") newState.timer.unref();
-            state = newState;
-            joinStates.set(nodeId, state);
-        }
-        state.arrived.set(fromNodeId, branchCtx.body);
-
-        // Every branch that reaches a join — whether it's the one that
-        // completes the set or one of the others still waiting behind it —
-        // ends up awaiting the exact same shared promise, resolved exactly
-        // once by settleJoin. That keeps this branch from running the node
-        // itself a second time no matter how many predecessors converge
-        // here.
-        if (state.arrived.size >= sources.length) settleJoin(nodeId, state);
-        return state.promise;
+        nodesRun++;
+        return executeAndContinue(node, branchCtx, isEntry);
     }
 
     const result = await runFrom(actualStartNodeId, true, ctx);

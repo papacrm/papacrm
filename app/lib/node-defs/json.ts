@@ -3,8 +3,8 @@ import type { ModuleNodeDef } from "./types";
 // No body of its own to write — it responds with whatever's chained into
 // it (ctx.body), the same "current data" every other node reads/writes.
 // See lib-server/nodes/json.ts for exactly what that ends up being,
-// including how it combines multiple inputs when "Multiple inputs" is set
-// to Wait.
+// including how any "data" edges into it (see ModuleEdge.edgeType in
+// ./types.ts) get merged in first.
 const jsonNode: ModuleNodeDef = {
     type: "json",
     label: "JSON",

@@ -8,10 +8,21 @@ const listNode: NodeExecutor = {
         const listId = String(node.data?.list ?? "");
         const nextNodeIds = nextEdgeTargets(node, edges);
 
-        // Check if this node has input (used after Save to List for forward lookup)
-        const hasInput = edges.some((e) => e.target === node.id);
+        // Pass-through mode is only for the "Save to List → List/List
+        // Upsert (forward lookup)" pattern (see saveToList.ts) — Save to
+        // List's own output always carries a `_saved` key (true or
+        // false), which is what actually identifies that pattern here.
+        // The previous check — any incoming edge at all, plus a non-null
+        // ctx.body — falsely matched *any* node placed right after this
+        // one with unrelated data already on it (e.g. Input Form → List
+        // Upsert), which meant this node's own list lookup/creation was
+        // silently skipped and ctx.body was left as whatever the
+        // unrelated predecessor had produced, with no listId anywhere on
+        // it — see lib-server/nodes/find.ts / findOne.ts, which then had
+        // nothing to query with.
+        const isSaveToListOutput = ctx.body !== null && typeof ctx.body === "object" && !Array.isArray(ctx.body) && "_saved" in ctx.body;
 
-        if (hasInput && ctx.body !== null && ctx.body !== undefined) {
+        if (isSaveToListOutput) {
             // Pass through mode: when used after Save to List, don't replace the output
             // The saved document is already in ctx.body, just pass it through
             return { done: false, nextNodeIds };

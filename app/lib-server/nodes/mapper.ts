@@ -1,11 +1,16 @@
-import { flattenJoinBody, isJoinBody, nextEdgeTargets, renderTemplate, uniqueIncomingSources, type NodeContext, type NodeExecutor } from "./types";
+import { nextEdgeTargets, renderTemplate, type NodeContext, type NodeExecutor } from "./types";
 
 // Builds the mapped object from the *current* context (i.e. before it's
 // overwritten) — every string value in the mapping is run through the same
 // {{field}} templating Static Page and HTTP Request use, so a mapper can
-// rename, combine, or hard-code fields from whatever the previous node left
-// in ctx.body / ctx.query. Non-string values pass through as-is (handy for
-// literal numbers/booleans/nested objects in the mapping JSON).
+// rename, combine, or hard-code fields from whatever's on ctx.body / ctx.
+// query. Non-string values pass through as-is (handy for literal numbers/
+// booleans/nested objects in the mapping JSON). If this node has any
+// incoming "data" edges (see ModuleEdge.edgeType in
+// ../../lib/node-defs/types.ts), moduleEngine.ts has already merged their
+// source's last output onto ctx.body before this runs, so {{field}} just
+// works the same whether a value came from the node that triggered this
+// one or from a data edge feeding it in parallel.
 function applyMapping(mapping: unknown, ctx: NodeContext): Record<string, any> {
     const out: Record<string, any> = {};
     if (!mapping || typeof mapping !== "object") return out;
@@ -26,18 +31,8 @@ const mapperNode: NodeExecutor = {
             mapping = {};
         }
 
-        // When this node has 2+ inputs and "Multiple inputs" is set to
-        // Wait, ctx.body arrives namespaced by source node id (see
-        // isJoinBody/flattenJoinBody in ./types). Mapper flattens that
-        // back into one flat object first, so the mapping can just use
-        // {{field}} everywhere — see flattenJoinBody's own doc comment for
-        // exactly how a shared field name is resolved.
-        const incomingSourceIds = uniqueIncomingSources(edges, node.id);
-        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
-        const effectiveCtx: NodeContext = waitJoin ? { ...ctx, body: flattenJoinBody(ctx.body as Record<string, unknown>) } : ctx;
-
-        const mapped = applyMapping(mapping, effectiveCtx);
-        const existing = effectiveCtx.body && typeof effectiveCtx.body === "object" ? effectiveCtx.body : {};
+        const mapped = applyMapping(mapping, ctx);
+        const existing = ctx.body && typeof ctx.body === "object" ? ctx.body : {};
         ctx.body = node.data?.mode === "merge" ? { ...existing, ...mapped } : mapped;
 
         return { done: false, nextNodeIds: nextEdgeTargets(node, edges) };

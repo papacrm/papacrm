@@ -88,6 +88,12 @@ export interface IModuleEdge {
     // "false"); null for single-output nodes.
     sourceHandle: string | null;
     target: string;
+    // See the matching field on ModuleEdge in app/lib/node-defs/types.ts —
+    // this is the persisted copy of the same thing. "workflow" (or
+    // omitted, for edges saved before this field existed) triggers the
+    // target; "data" only supplies fields, merged in by moduleEngine.ts
+    // whenever the target actually runs via a workflow edge.
+    edgeType?: "workflow" | "data";
 }
 
 export interface IModule extends Document {
@@ -189,6 +195,7 @@ const ModuleEdgeSchema = new Schema<IModuleEdge>(
         source: { type: String, required: true },
         sourceHandle: { type: String, default: null },
         target: { type: String, required: true },
+        edgeType: { type: String, enum: ["workflow", "data"], default: "workflow" },
     },
     { _id: false },
 );

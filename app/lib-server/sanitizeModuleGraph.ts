@@ -38,5 +38,10 @@ export function sanitizeEdges(edges: unknown, nodeIds: Set<string>): any[] {
             source: e.source,
             target: e.target,
             sourceHandle: typeof e.sourceHandle === "string" ? e.sourceHandle : null,
+            // See ModuleEdge.edgeType in lib/node-defs/types.ts — anything
+            // other than exactly "data" is treated as the default
+            // "workflow" edge, same as an edge with the field omitted
+            // entirely (e.g. one saved before this field existed).
+            ...(e.edgeType === "data" ? { edgeType: "data" as const } : {}),
         }));
 }

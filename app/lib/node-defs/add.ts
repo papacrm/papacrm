@@ -9,11 +9,11 @@ const addNode: ModuleNodeDef = {
     type: "add",
     label: "Add",
     description:
-        'Adds numbers together and saves the result. With one input wired in, reads a number from it (optionally via a specific field) and adds a literal number to it. With two or more inputs, it waits for all of them and instead sums one field per input — set per-input in the inspector.',
+        "Adds numbers together and saves the result. With one input wired in, reads a number from it (optionally via a specific field) and adds a literal number to it. With two or more inputs, it sums one field per input — set per-input in the inspector — using whatever each has produced by the time Add runs, without waiting for all of them.",
     color: "#65a30d",
     kind: "action",
     fields: [{ key: "as", label: "Save as (used later as {{field}})", kind: "text", placeholder: "sum" }],
-    defaultData: () => ({ as: "sum", joinMode: "wait", field: "", number: "", sumFields: {} }),
+    defaultData: () => ({ as: "sum", field: "", number: "", sumFields: {} }),
     summarize: (data) => (data?.as ? `Add → ${data.as}` : "No field name set"),
 };
 

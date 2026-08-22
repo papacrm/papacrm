@@ -16,7 +16,7 @@ const conditionNode: ModuleNodeDef = {
     type: "condition",
     label: "Condition",
     description:
-        "Branches the module based on a value. \">/>=/</<=\" and \"==/===/!=\" compare numbers when both sides look numeric (\"===\" additionally requires the same type, so \"5\" isn't === 5). The chosen branch's next node always gets the current data as-is — chain in a \"Pass data through\" node afterward if you need to hand data from one point to another. Wire in more than one node and set \"Multiple inputs\" to \"Wait\" in the inspector to check across all of them at once — they're combined into a single object first, so Field can just use e.g. \"status\", no need to reference a source node's id.",
+        "Branches the module based on a value. \">/>=/</<=\" and \"==/===/!=\" compare numbers when both sides look numeric (\"===\" additionally requires the same type, so \"5\" isn't === 5). The chosen branch's next node always gets the current data as-is — chain in a \"Pass data through\" node afterward if you need to hand data from one point to another. Wire in more nodes with \"data\" edges (click the icon on the connection to switch it) to check across all of them at once — Field can just use e.g. \"status\", no need to reference a source node's id.",
     color: "#d97706",
     kind: "branch",
     fields: [

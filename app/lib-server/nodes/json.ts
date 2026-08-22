@@ -1,27 +1,20 @@
-import { flattenJoinBody, isJoinBody, uniqueIncomingSources, type NodeExecutor } from "./types";
+import type { NodeExecutor } from "./types";
 
 // Ends the run with a raw JSON response instead of a rendered page — for
 // building an API endpoint rather than a webpage. No body of its own to
 // write: it just responds with whatever's currently on ctx.body, i.e.
 // whatever the node(s) chained into it produced (an Input Form submission,
-// a Mapper's reshaped object, a List's { fields, documents }, ...).
-//
-// When this node has 2+ inputs and "Multiple inputs" is set to Wait,
-// ctx.body arrives namespaced by source node id (see isJoinBody/
-// flattenJoinBody in ./types — same join shape Mapper flattens) — flatten
-// that here too, so the response is one combined object of everything
-// chained into it rather than requiring a {{sourceNodeId.field}} lookup
-// nobody can do on a raw JSON response anyway.
+// a Mapper's reshaped object, a List's { fields, documents }, ...). If
+// this node has any incoming "data" edges (see ModuleEdge.edgeType in
+// ../../lib/node-defs/types.ts), moduleEngine.ts has already merged their
+// source's last output onto ctx.body before this runs, so the response is
+// one combined object of everything feeding into it.
 const jsonNode: NodeExecutor = {
-    run({ node, ctx, edges }) {
-        const incomingSourceIds = uniqueIncomingSources(edges, node.id);
-        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
-        const data = waitJoin ? flattenJoinBody(ctx.body as Record<string, unknown>) : (ctx.body ?? null);
-
+    run({ node, ctx }) {
         const status = Number(node.data?.status);
         return {
             done: true,
-            result: { kind: "json", status: Number.isFinite(status) && status > 0 ? status : 200, data },
+            result: { kind: "json", status: Number.isFinite(status) && status > 0 ? status : 200, data: ctx.body ?? null },
         };
     },
 };

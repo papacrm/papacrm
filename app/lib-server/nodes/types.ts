@@ -156,6 +156,18 @@ export interface NodeContext {
     // `renderTemplate`/`readPath` below fall back to it whenever a
     // `{{field}}` isn't found on the current `body` or `query`.
     heldFields: Record<string, unknown>;
+    // What every node that's already run *this request* produced —
+    // populated by moduleEngine.ts right after each node's executor
+    // returns, keyed by that node's id. This is what a "data" edge (see
+    // ModuleEdge.edgeType in ../../lib/node-defs/types.ts) actually reads
+    // from: unlike `body`, which only ever reflects whichever workflow
+    // edge most recently triggered this branch, `nodeOutputs` remembers
+    // every node's own last result regardless of which branch produced
+    // it, so a data edge from a node elsewhere in the graph can still
+    // supply its fields even if that node ran on a completely different
+    // branch earlier in the same request. Shared by reference across
+    // every branch, same as responseHeaders/setCookies.
+    nodeOutputs: Record<string, unknown>;
 }
 
 export type NodeOutcome =
@@ -242,46 +254,36 @@ export function matchPath(pattern: string, path: string): Record<string, string>
     return params;
 }
 
-// Follows every outgoing edge from `node` (a node can now fan out to more
-// than one next node — e.g. one branch saves to the database while another
-// renders the response page). Pass `sourceHandle` for branch-style nodes
-// (e.g. "true"/"false"); omit it for single-handle nodes.
+// Follows every outgoing *workflow* edge from `node` (a node can now fan
+// out to more than one next node — e.g. one branch saves to the database
+// while another renders the response page). Pass `sourceHandle` for
+// branch-style nodes (e.g. "true"/"false"); omit it for single-handle
+// nodes. Deliberately excludes "data" edges (see ModuleEdge.edgeType in
+// ../../lib/node-defs/types.ts) — those never drive execution on their
+// own, they only ever supply fields to whatever they're wired into, once
+// something else actually triggers it. See dataEdgeSources below for the
+// data-edge counterpart of this function.
 export function nextEdgeTargets(node: IModuleNode, edges: IModuleEdge[], sourceHandle?: string): string[] {
-    return edges.filter((e) => e.source === node.id && (sourceHandle === undefined || e.sourceHandle === sourceHandle)).map((e) => e.target);
+    return edges
+        .filter((e) => e.source === node.id && (sourceHandle === undefined || e.sourceHandle === sourceHandle) && e.edgeType !== "data")
+        .map((e) => e.target);
 }
 
-// Distinct source nodes with an edge into `nodeId` — a node with 2+ of
-// these is a *join*. Shared with moduleEngine.ts (which uses it to decide
-// whether a node is a join at all) and with any node executor that needs
-// to recognize its own multi-input "wait" join body — see isJoinBody below.
+// Distinct source nodes with a "data" edge into `nodeId`, in the order
+// those edges appear in `edges`. Used by moduleEngine.ts to know which
+// other nodes' `nodeOutputs` to merge onto a node's incoming body right
+// before it runs.
+export function dataEdgeSources(nodeId: string, edges: IModuleEdge[]): string[] {
+    return Array.from(new Set(edges.filter((e) => e.target === nodeId && e.edgeType === "data").map((e) => e.source)));
+}
+
+// Distinct source nodes with any edge (workflow or data) into `nodeId`.
+// Used by Add (lib-server/nodes/add.ts) to sum one value per predecessor
+// regardless of which kind of edge feeds it in — see that file for why it
+// needs each source's value kept separate rather than merged flat the way
+// a "data" edge normally is.
 export function uniqueIncomingSources(edges: IModuleEdge[], nodeId: string): string[] {
     return Array.from(new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source)));
-}
-
-// When a node has "Multiple inputs" set to Wait, moduleEngine's join (see
-// settleJoin in ../moduleEngine.ts) hands it a body namespaced by which
-// predecessor it arrived from — `{ [sourceNodeId]: bodyFromThatSource }` —
-// so a downstream {{sourceNodeId.field}} can target one specifically.
-// isJoinBody detects that shape; flattenJoinBody merges it back into one
-// plain object instead, so a node that wants *every* input combined can
-// just use {{field}} everywhere, same as a single input. If two inputs
-// share a prop name, the one that arrived later simply overwrites the
-// earlier one — Object.values walks the join body in the order its keys
-// were inserted, which is arrival order (settleJoin builds it by iterating
-// its `arrived` Map, itself populated in arrival order) — so this is "last
-// one in wins", not a lookup by source node id. Used by Mapper and JSON.
-export function isJoinBody(body: unknown, incomingSourceIds: string[]): body is Record<string, unknown> {
-    if (incomingSourceIds.length < 2) return false;
-    if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-    return incomingSourceIds.every((id) => id in (body as Record<string, unknown>));
-}
-
-export function flattenJoinBody(body: Record<string, unknown>): Record<string, any> {
-    const flat: Record<string, any> = {};
-    for (const part of Object.values(body)) {
-        if (part && typeof part === "object" && !Array.isArray(part)) Object.assign(flat, part);
-    }
-    return flat;
 }
 
 export function readPath(source: unknown, path: string): unknown {

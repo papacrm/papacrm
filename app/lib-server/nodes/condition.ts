@@ -1,5 +1,5 @@
 import type { IModuleNode } from "../models/Module";
-import { flattenJoinBody, isJoinBody, nextEdgeTargets, readPath, renderTemplate, uniqueIncomingSources, type NodeContext, type NodeExecutor } from "./types";
+import { nextEdgeTargets, readPath, renderTemplate, type NodeContext, type NodeExecutor } from "./types";
 
 function toNumberOrNaN(v: unknown): number {
     if (typeof v === "number") return v;
@@ -76,22 +76,11 @@ function evaluateCondition(node: IModuleNode, body: unknown, query: Record<strin
 
 const conditionNode: NodeExecutor = {
     run({ node, ctx, edges }) {
-        // Same join-flattening Mapper uses (see flattenJoinBody's doc
-        // comment in ./types): when this node has 2+ inputs and "Multiple
-        // inputs" is set to Wait, ctx.body arrives namespaced by source
-        // node id. Flatten it — and, importantly, write the flattened
-        // version *back* onto ctx.body — so "Field" can just be e.g.
-        // "status" (no source node id needed), and so anything downstream
-        // (e.g. "Pass data through" handing this on to JSON/Mapper/etc.)
-        // sees the same flattened object rather than the raw namespaced
-        // one, which would otherwise still show up keyed by an
-        // unflattened node id like "n_xxxxx" in the final result.
-        const incomingSourceIds = uniqueIncomingSources(edges, node.id);
-        const waitJoin = String((node.data as any)?.joinMode ?? "continue") === "wait" && isJoinBody(ctx.body, incomingSourceIds);
-        if (waitJoin) {
-            ctx.body = flattenJoinBody(ctx.body as Record<string, unknown>);
-        }
-
+        // If this node has any incoming "data" edges (see ModuleEdge.
+        // edgeType in ../../lib/node-defs/types.ts), moduleEngine.ts has
+        // already merged their source's last output onto ctx.body before
+        // this runs — "Field" can just be e.g. "status", no source node
+        // id needed, same as a single-input node.
         const branch = evaluateCondition(node, ctx.body, ctx.query, ctx) ? "true" : "false";
 
         // Whatever's currently on ctx.body — a submitted form's fields, a

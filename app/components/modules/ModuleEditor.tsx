@@ -44,6 +44,10 @@ const COMMENT_DEFAULT_HEIGHT = 140;
 // empty or unparsable.
 const BOX_DEFAULT_WIDTH = 360;
 const BOX_DEFAULT_HEIGHT = 240;
+// Fixed footprint a Group Box collapses to in "shrink" mode — small
+// enough to read as a single node, big enough to fit a title.
+const BOX_SHRINK_WIDTH = 180;
+const BOX_SHRINK_HEIGHT = 56;
 // Floor for dragging either annotation node's resize handle — keeps a
 // title/text and the resize grip from ever overlapping themselves.
 const ANNOTATION_MIN_WIDTH = 160;
@@ -73,6 +77,11 @@ function commentColors(data: Record<string, any> | undefined) {
 // connect-target hit testing, and the card's own rendered size.
 function nodeSize(node: Pick<ModuleNode, "type" | "data">): { width: number; height: number } {
     if (node.type === "box") {
+        // Shrink mode overrides whatever size was dragged/persisted —
+        // the box always collapses to the same small chip.
+        if (node.data?.mode === "shrink") {
+            return { width: BOX_SHRINK_WIDTH, height: BOX_SHRINK_HEIGHT };
+        }
         const w = parseInt(node.data?.width, 10);
         const h = parseInt(node.data?.height, 10);
         return {
@@ -89,6 +98,39 @@ function nodeSize(node: Pick<ModuleNode, "type" | "data">): { width: number; hei
         };
     }
     return { width: NODE_WIDTH, height: NODE_HEIGHT };
+}
+
+// Every other node whose footprint sits fully inside a Group Box's own
+// bounds — used by "lock" mode (what should be dragged along with the
+// box) and by "shrink" mode (what should be hidden, and rerouted, when
+// the box collapses). Never includes other annotation nodes (boxes,
+// comments), just in case one is dragged on top of another — grouping a
+// group isn't supported.
+function nodesContainedInBox(box: ModuleNode, boxSize: { width: number; height: number }, allNodes: ModuleNode[]): ModuleNode[] {
+    const left = box.x;
+    const top = box.y;
+    const right = box.x + boxSize.width;
+    const bottom = box.y + boxSize.height;
+    return allNodes.filter((n) => {
+        if (n.id === box.id) return false;
+        if (NODE_DEFS[n.type].kind === "annotation") return false;
+        const size = nodeSize(n);
+        return n.x >= left && n.y >= top && n.x + size.width <= right && n.y + size.height <= bottom;
+    });
+}
+
+// Parses a Group Box's persisted memberIds (only meaningful in "shrink"
+// mode — see setBoxMode below, which snapshots this the moment a box is
+// shrunk since its own bounds are too small to compute containment from
+// once collapsed).
+function parseMemberIds(raw: unknown): string[] {
+    if (typeof raw !== "string" || !raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+    } catch {
+        return [];
+    }
 }
 // Starting size of the canvas workspace — big enough that most modules
 // never need to grow it, so there's only a little scroll to begin with.
@@ -166,20 +208,35 @@ function newId(prefix: string): string {
 
 function outputHandlePosition(node: ModuleNode, handle: string | null) {
     const def = NODE_DEFS[node.type];
+    const size = nodeSize(node);
     if (def.kind === "branch") {
-        const y = handle === "false" ? node.y + NODE_HEIGHT * 0.75 : node.y + NODE_HEIGHT * 0.28;
-        return { x: node.x + NODE_WIDTH, y };
+        const y = handle === "false" ? node.y + size.height * 0.75 : node.y + size.height * 0.28;
+        return { x: node.x + size.width, y };
     }
-    return { x: node.x + NODE_WIDTH, y: node.y + NODE_HEIGHT / 2 };
+    return { x: node.x + size.width, y: node.y + size.height / 2 };
 }
 
 function inputHandlePosition(node: ModuleNode) {
-    return { x: node.x, y: node.y + NODE_HEIGHT / 2 };
+    const size = nodeSize(node);
+    return { x: node.x, y: node.y + size.height / 2 };
 }
 
 function edgePathD(x1: number, y1: number, x2: number, y2: number) {
     const dx = Math.max(40, Math.abs(x2 - x1) / 2);
     return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+}
+
+// Point at t=0.5 of the same cubic bezier edgePathD draws, so the little
+// workflow/data toggle icon sits right on the curve instead of just at
+// the straight-line midpoint between the two handles.
+function edgeMidpoint(x1: number, y1: number, x2: number, y2: number) {
+    const dx = Math.max(40, Math.abs(x2 - x1) / 2);
+    const cx1 = x1 + dx;
+    const cx2 = x2 - dx;
+    return {
+        x: 0.125 * x1 + 0.375 * cx1 + 0.375 * cx2 + 0.125 * x2,
+        y: 0.125 * y1 + 0.375 * y1 + 0.375 * y2 + 0.125 * y2,
+    };
 }
 
 export default function ModuleEditor({ module, kind = "module", backHref = "/d/modules", readOnly = false }: ModuleEditorProps) {
@@ -579,6 +636,15 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                 .filter((n): n is ModuleNode => !!n)
                 .map((n) => [n.id, { x: n.x, y: n.y }]),
         );
+        // A Group Box in "lock" mode drags everything currently inside
+        // its bounds along with it, even though those nodes aren't
+        // themselves selected — see node-defs/box.ts.
+        if (node.type === "box" && node.data?.mode === "lock") {
+            const boxSize = nodeSize(node);
+            for (const child of nodesContainedInBox(node, boxSize, nodesRef.current)) {
+                if (!startPositions.has(child.id)) startPositions.set(child.id, { x: child.x, y: child.y });
+            }
+        }
         dragRef.current = { anchorId: node.id, startX: x, startY: y, startPositions };
     }
 
@@ -708,12 +774,21 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         const idMap = new Map(sources.map((n) => [n.id, newId("n")]));
         const copies: ModuleNode[] = sources.map((source) => {
             const size = nodeSize(source);
+            // A shrunk Group Box's memberIds point at specific node ids —
+            // remap any that are also being copied so the duplicate box
+            // still hides/reroutes its own copies rather than reaching
+            // back into the originals. Members that weren't part of this
+            // duplication are dropped; there's nothing sensible to hide.
+            const data =
+                source.type === "box" && source.data?.mode === "shrink"
+                    ? { ...source.data, memberIds: JSON.stringify(parseMemberIds(source.data?.memberIds).filter((id) => idMap.has(id)).map((id) => idMap.get(id)!)) }
+                    : { ...source.data };
             return {
                 ...source,
                 id: idMap.get(source.id)!,
                 x: Math.max(0, Math.min(canvasSizeRef.current.width - size.width, source.x + 32)),
                 y: Math.max(0, Math.min(canvasSizeRef.current.height - size.height, source.y + 32)),
-                data: { ...source.data },
+                data,
             };
         });
         const copiedEdges: ModuleEdge[] = edges
@@ -746,6 +821,26 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
         setDirty(true);
     }
 
+    // Switches a Group Box between its three modes (see node-defs/box.ts).
+    // Entering "shrink" snapshots which nodes are currently inside the
+    // box's bounds into data.memberIds — the box's own bounds collapse
+    // the moment it shrinks, so there's nothing left to compute
+    // containment from afterwards; this is read back by the render below
+    // to hide those nodes and reroute their edges. Leaving "shrink"
+    // clears memberIds again so a later shrink recomputes fresh.
+    function setBoxMode(nodeId: string, mode: string) {
+        if (readOnly) return;
+        const box = nodesRef.current.find((n) => n.id === nodeId);
+        if (!box) return;
+        if (mode === "shrink") {
+            const boxSize = nodeSize(box);
+            const members = nodesContainedInBox(box, boxSize, nodesRef.current);
+            updateNodeDataMulti(nodeId, { mode, memberIds: JSON.stringify(members.map((n) => n.id)) });
+        } else {
+            updateNodeDataMulti(nodeId, { mode, memberIds: "" });
+        }
+    }
+
     // Merges a single child's position into a View node's data.layout —
     // keyed by the child node's id, so it survives independently of the
     // order blocks were connected in. See the "Layout" section of the
@@ -766,6 +861,20 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
     function deleteEdge(edgeId: string) {
         if (readOnly) return;
         setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+        setDirty(true);
+    }
+
+    // Flips an edge between "workflow" (the default — triggers its
+    // target, same as every edge always has) and "data" (only supplies
+    // fields, never triggers on its own — see ModuleEdge.edgeType in
+    // lib/node-defs/types.ts and the merge step in moduleEngine.ts).
+    // Clicked via the little icon rendered at the edge's midpoint below,
+    // not the edge itself (which still deletes on click, as before).
+    function toggleEdgeType(edgeId: string) {
+        if (readOnly) return;
+        setEdges((prev) =>
+            prev.map((e) => (e.id === edgeId ? { ...e, edgeType: e.edgeType === "data" ? "workflow" : "data" } : e)),
+        );
         setDirty(true);
     }
 
@@ -904,6 +1013,33 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
             return next;
         });
     }
+
+    // Every node currently hidden inside a shrunk Group Box, mapped to
+    // the box hiding it — read by the node list below (to skip rendering
+    // them) and the edge list below (to reroute any connection touching
+    // one of them onto the box instead). Built fresh each render off the
+    // shrunk boxes' persisted memberIds (see setBoxMode above); cheap
+    // enough for the node counts a module canvas ever has.
+    const hiddenMemberBoxId = new Map<string, string>();
+    for (const n of nodes) {
+        if (n.type === "box" && n.data?.mode === "shrink") {
+            for (const memberId of parseMemberIds(n.data?.memberIds)) hiddenMemberBoxId.set(memberId, n.id);
+        }
+    }
+    const visibleNodes = nodes.filter((n) => !hiddenMemberBoxId.has(n.id));
+    // Edges get rerouted so anything touching a hidden node reads as
+    // going to/from the box that swallowed it — except an edge whose
+    // both ends are hidden inside the very same box, which is now purely
+    // internal and just disappears until the box is un-shrunk.
+    const visibleEdges = edges
+        .map((edge) => {
+            const sourceBoxId = hiddenMemberBoxId.get(edge.source);
+            const targetBoxId = hiddenMemberBoxId.get(edge.target);
+            if (sourceBoxId && targetBoxId && sourceBoxId === targetBoxId) return null;
+            if (!sourceBoxId && !targetBoxId) return edge;
+            return { ...edge, source: sourceBoxId ?? edge.source, target: targetBoxId ?? edge.target };
+        })
+        .filter((e): e is ModuleEdge => !!e);
 
     return (
         <div className="flex h-full flex-col overflow-hidden">
@@ -1050,28 +1186,62 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                 >
                     <div style={{ width: canvasSize.width, height: canvasSize.height, position: "relative" }}>
                         <svg width={canvasSize.width} height={canvasSize.height} className="pointer-events-none absolute left-0 top-0">
-                            {edges.map((edge) => {
+                            {visibleEdges.map((edge) => {
                                 const source = nodes.find((n) => n.id === edge.source);
                                 const target = nodes.find((n) => n.id === edge.target);
                                 if (!source || !target) return null;
                                 const from = outputHandlePosition(source, edge.sourceHandle);
                                 const to = inputHandlePosition(target);
+                                const isData = edge.edgeType === "data";
                                 const color = edge.sourceHandle === "true" ? "#059669" : edge.sourceHandle === "false" ? "#dc2626" : "#a1a1aa";
+                                const mid = edgeMidpoint(from.x, from.y, to.x, to.y);
                                 return (
-                                    <path
-                                        key={edge.id}
-                                        d={edgePathD(from.x, from.y, to.x, to.y)}
-                                        stroke={color}
-                                        strokeWidth={2}
-                                        fill="none"
-                                        className="pointer-events-auto cursor-pointer"
-                                        onMouseDown={(e) => {
-                                            e.stopPropagation();
-                                            deleteEdge(edge.id);
-                                        }}
-                                    >
-                                        <title>Click to remove this connection</title>
-                                    </path>
+                                    <g key={edge.id}>
+                                        <path
+                                            d={edgePathD(from.x, from.y, to.x, to.y)}
+                                            stroke={color}
+                                            strokeWidth={2}
+                                            strokeDasharray={isData ? "5 4" : undefined}
+                                            fill="none"
+                                            className="pointer-events-auto cursor-pointer"
+                                            onMouseDown={(e) => {
+                                                e.stopPropagation();
+                                                deleteEdge(edge.id);
+                                            }}
+                                        >
+                                            <title>Click to remove this connection</title>
+                                        </path>
+                                        {/* Workflow (chevron, solid ring) vs data (magnifier, dashed
+                                            ring) toggle — click flips edge.edgeType without deleting
+                                            the edge, unlike clicking the path itself above. */}
+                                        <g
+                                            transform={`translate(${mid.x}, ${mid.y})`}
+                                            className="pointer-events-auto cursor-pointer"
+                                            onMouseDown={(e) => {
+                                                e.stopPropagation();
+                                                toggleEdgeType(edge.id);
+                                            }}
+                                        >
+                                            <title>{isData ? "Data edge — click to make this a workflow edge" : "Workflow edge — click to make this a data edge"}</title>
+                                            <circle
+                                                r={9}
+                                                fill="white"
+                                                stroke={isData ? "#7c3aed" : "#a1a1aa"}
+                                                strokeWidth={1.5}
+                                                strokeDasharray={isData ? "2.5 2" : undefined}
+                                            />
+                                            {isData ? (
+                                                // Magnifying glass
+                                                <g stroke="#7c3aed" strokeWidth={1.4} fill="none" strokeLinecap="round">
+                                                    <circle cx={-1.5} cy={-1.5} r={3.2} />
+                                                    <path d="M0.8 0.8 L3.2 3.2" />
+                                                </g>
+                                            ) : (
+                                                // Chevron
+                                                <path d="M-2.5 -4 L2.5 0 L-2.5 4" stroke="#71717a" strokeWidth={1.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                                            )}
+                                        </g>
+                                    </g>
                                 );
                             })}
                             {connectingLine && (
@@ -1092,7 +1262,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             />
                         )}
 
-                        {[...nodes].sort((a, b) => (a.type === "box" ? -1 : 0) - (b.type === "box" ? -1 : 0)).map((node) => {
+                        {[...visibleNodes].sort((a, b) => (a.type === "box" ? -1 : 0) - (b.type === "box" ? -1 : 0)).map((node) => {
                             const def = NODE_DEFS[node.type];
                             const isSelected = selectedIds.has(node.id);
                             const size = nodeSize(node);
@@ -1156,19 +1326,34 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                             }
 
                             if (node.type === "box") {
+                                const mode = node.data?.mode || "current";
+                                const isShrunk = mode === "shrink";
+                                const isLocked = mode === "lock";
+                                const description = node.data?.description ? String(node.data.description) : "";
                                 return (
                                     <div
                                         key={node.id}
                                         onMouseDown={(e) => handleNodeMouseDown(e, node)}
-                                        className={`absolute cursor-grab select-none rounded-lg border-2 border-dashed bg-neutral-50/60 active:cursor-grabbing ${
-                                            isSelected ? "border-neutral-500" : "border-neutral-300"
-                                        }`}
+                                        title={description || undefined}
+                                        className={`absolute cursor-grab select-none rounded-lg border-2 bg-neutral-50/60 active:cursor-grabbing ${
+                                            isShrunk ? "border-solid shadow-sm" : "border-dashed"
+                                        } ${isSelected ? "border-neutral-500" : "border-neutral-300"}`}
                                         style={{ left: node.x, top: node.y, width: size.width, height: size.height }}
                                     >
                                         <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
                                             <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-neutral-600">
                                                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: def.color }} />
                                                 <span className="truncate">{node.data?.title || "Untitled group"}</span>
+                                                {isLocked && (
+                                                    <span className="shrink-0 text-neutral-400" title="Lock mode — nodes inside move with this box">
+                                                        🔒
+                                                    </span>
+                                                )}
+                                                {isShrunk && (
+                                                    <span className="shrink-0 text-neutral-400" title="Shrunk — click Mode to expand">
+                                                        ▢
+                                                    </span>
+                                                )}
                                             </span>
                                             <button
                                                 type="button"
@@ -1180,16 +1365,21 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                                 ×
                                             </button>
                                         </div>
-                                        <div
-                                            data-resize-handle
-                                            onMouseDown={(e) => handleResizeMouseDown(e, node)}
-                                            className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize text-neutral-400 hover:text-neutral-600"
-                                            title="Drag to resize"
-                                        >
-                                            <svg viewBox="0 0 10 10" className="h-full w-full p-0.5">
-                                                <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-                                            </svg>
-                                        </div>
+                                        {!isShrunk && description && (
+                                            <div className="truncate px-2.5 text-[11px] text-neutral-400">{description}</div>
+                                        )}
+                                        {!isShrunk && (
+                                            <div
+                                                data-resize-handle
+                                                onMouseDown={(e) => handleResizeMouseDown(e, node)}
+                                                className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize text-neutral-400 hover:text-neutral-600"
+                                                title="Drag to resize"
+                                            >
+                                                <svg viewBox="0 0 10 10" className="h-full w-full p-0.5">
+                                                    <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                                                </svg>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             }
@@ -1522,6 +1712,31 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     }
                                 }
 
+                                // Group Box's Mode select needs to do more than just write
+                                // one field — switching into "shrink" has to snapshot which
+                                // nodes are inside it first (see setBoxMode above), so it
+                                // gets its own branch instead of the generic select case
+                                // below.
+                                if (field.kind === "select" && field.key === "mode" && selectedNode.type === "box") {
+                                    return (
+                                        <div key={field.key} className="flex flex-col gap-1.5">
+                                            <Label htmlFor={field.key}>{field.label}</Label>
+                                            <select
+                                                id={field.key}
+                                                value={selectedNode.data?.[field.key] ?? "current"}
+                                                onChange={(e) => setBoxMode(selectedNode.id, e.target.value)}
+                                                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+                                            >
+                                                {field.options?.map((opt) => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    );
+                                }
+
                                 if (field.kind === "toggle") {
                                     const checked = selectedNode.data?.[field.key] !== false;
                                     return (
@@ -1599,81 +1814,6 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     </div>
                                 );
                             })}
-
-                            {(() => {
-                                // Any node reached by more than one distinct
-                                // predecessor is a *join* — see the
-                                // `incomingSources`/`joinStates` handling in
-                                // lib-server/moduleEngine.ts. Surfaced here for
-                                // every node type (not just Mapper) since the
-                                // engine treats it generically.
-                                const incomingIds = Array.from(
-                                    new Set(edges.filter((e) => e.target === selectedNode.id).map((e) => e.source)),
-                                );
-                                if (incomingIds.length < 2 || selectedNode.type === "add") return null;
-                                const incomingNodes = incomingIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is ModuleNode => Boolean(n));
-                                const joinMode = selectedNode.data?.joinMode === "wait" ? "wait" : "continue";
-
-                                return (
-                                    <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-                                        <div>
-                                            <Label>Multiple inputs</Label>
-                                            <p className="text-xs text-neutral-500">
-                                                This node is fed by {incomingIds.length} other nodes. Choose how it should handle that:
-                                            </p>
-                                        </div>
-                                        <select
-                                            value={joinMode}
-                                            onChange={(e) => updateNodeData(selectedNode.id, "joinMode", e.target.value)}
-                                            className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
-                                        >
-                                            <option value="continue">Continue after the first input arrives (runs once per input, like today)</option>
-                                            <option value="wait">Wait for every input, then run once with all of them combined</option>
-                                        </select>
-                                        {joinMode === "wait" && (
-                                            <div className="rounded-md bg-neutral-50 p-2">
-                                                {selectedNode.type === "mapper" ? (
-                                                    <p className="text-xs text-neutral-500">
-                                                        Mapper combines every input into a single object before mapping, so just use{" "}
-                                                        <code className="font-mono">{"{{field}}"}</code>. If two inputs share a field name, whichever
-                                                        one arrives last wins — there's no need to reference a source node's id.
-                                                    </p>
-                                                ) : selectedNode.type === "condition" ? (
-                                                    <p className="text-xs text-neutral-500">
-                                                        Condition combines every input into a single object before checking it, so the Field box can
-                                                        just use e.g. <code className="font-mono">status</code>. If two inputs share a field name,
-                                                        whichever one arrives last wins — there's no need to reference a source node's id.
-                                                    </p>
-                                                ) : selectedNode.type === "saveToList" ? (
-                                                    <p className="text-xs text-neutral-500">
-                                                        Save to List combines every input into a single object. It extracts list metadata (listId, fields) from one input and data fields from all inputs, then saves the data to the list. Typically: connect a List node and a Form/Mapper node, both feeding into Save to List with wait mode.
-                                                    </p>
-                                                ) : (
-                                                    <>
-                                                        <p className="text-xs text-neutral-500">
-                                                            Each input is namespaced by its source node's id, so use{" "}
-                                                            <code className="font-mono">{"{{nodeId.field}}"}</code> to read a specific one:
-                                                        </p>
-                                                        <ul className="mt-1 flex flex-col gap-0.5">
-                                                            {incomingNodes.map((n) => (
-                                                                <li key={n.id} className="flex items-center gap-1.5 text-xs">
-                                                                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: NODE_DEFS[n.type].color }} />
-                                                                    <span className="text-neutral-700">{NODE_DEFS[n.type].label}</span>
-                                                                    <code className="truncate font-mono text-neutral-400">{`{{${n.id}.…}}`}</code>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </>
-                                                )}
-                                                <p className="mt-1 text-xs text-amber-600">
-                                                    If one of these branches never actually fires this run (e.g. the untaken side of a Condition), this node
-                                                    waits up to a few seconds before running anyway with whichever inputs did arrive.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
 
                             {selectedNode.type === "add" &&
                                 (() => {
