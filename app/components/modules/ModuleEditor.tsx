@@ -1577,7 +1577,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     const manualEntrySupported = selectedNode.type === "passThrough";
 
                                     return (
-                                        <div key={field.key} className="flex flex-col gap-3">
+                                        <div key={`${selectedNode.id}-${field.key}`} className="flex flex-col gap-3">
                                             <Label>{field.label}</Label>
                                             {!findNode && manualEntrySupported ? (
                                                 <div className="flex flex-col gap-1.5">
@@ -1704,7 +1704,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                     const hasInput = edges.some((e) => e.target === selectedNode.id);
                                     if (!hasInput) {
                                         return (
-                                            <div key={field.key} className="flex flex-col gap-1.5">
+                                            <div key={`${selectedNode.id}-${field.key}`} className="flex flex-col gap-1.5">
                                                 <Label>{field.label}</Label>
                                                 <p className="text-sm text-neutral-500">Chain a node into this State node to map its data.</p>
                                             </div>
@@ -1719,7 +1719,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 // below.
                                 if (field.kind === "select" && field.key === "mode" && selectedNode.type === "box") {
                                     return (
-                                        <div key={field.key} className="flex flex-col gap-1.5">
+                                        <div key={`${selectedNode.id}-${field.key}`} className="flex flex-col gap-1.5">
                                             <Label htmlFor={field.key}>{field.label}</Label>
                                             <select
                                                 id={field.key}
@@ -1740,7 +1740,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 if (field.kind === "toggle") {
                                     const checked = selectedNode.data?.[field.key] !== false;
                                     return (
-                                        <div key={field.key} className="flex items-center justify-between gap-2">
+                                        <div key={`${selectedNode.id}-${field.key}`} className="flex items-center justify-between gap-2">
                                             <Label htmlFor={field.key}>{field.label}</Label>
                                             <div className="flex items-center gap-2">
                                                 <Switch
@@ -1758,7 +1758,7 @@ export default function ModuleEditor({ module, kind = "module", backHref = "/d/m
                                 }
 
                                 return (
-                                    <div key={field.key} className="flex flex-col gap-1.5">
+                                    <div key={`${selectedNode.id}-${field.key}`} className="flex flex-col gap-1.5">
                                         <Label htmlFor={field.key}>{field.label}</Label>
                                         {field.kind === "select" && field.dynamicOptions === "lists" ? (
                                             <select

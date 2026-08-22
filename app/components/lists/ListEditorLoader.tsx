@@ -53,5 +53,13 @@ export default function ListEditorLoader() {
         );
     }
 
-    return <ListEditor list={list} />;
+    // key={list._id} forces a full remount when navigating from one
+    // list to another (same route component instance otherwise, since
+    // only the [id] param changes). Without it, ListEditor's `name` and
+    // `fields` state — both seeded once via useState(list...) — never
+    // re-initializes for the new list, so the schema editor and the
+    // documents table kept rendering the *previous* list's field set
+    // against the new list's data, which is what caused the random
+    // crashes when switching between lists.
+    return <ListEditor key={list._id} list={list} />;
 }

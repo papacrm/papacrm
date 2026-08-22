@@ -61,5 +61,14 @@ export default function ModuleEditorLoader() {
         );
     }
     
-    return <ModuleEditor module={module} />;
+    // key={module._id} forces a full remount whenever the person
+    // navigates from one module to another (the route is the same
+    // component instance otherwise, since only the [id] param changes).
+    // Without it, ModuleEditor's internal state (nodes, edges, the
+    // canvas refs, the currently-mounted contentEditable in the HTML
+    // node field, etc.) keeps referring to the previous module while
+    // now being fed a different module's data — which is what was
+    // producing the intermittent "removeChild" crash when switching
+    // between modules or reopening one after editing another.
+    return <ModuleEditor key={module._id} module={module} />;
 }

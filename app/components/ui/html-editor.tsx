@@ -230,8 +230,23 @@ const HtmlEditor = React.forwardRef<HTMLTextAreaElement, HtmlEditorProps>(
             const el = editableRef.current;
             if (!el || mode !== "edit") return;
             if (stringValue === lastEmitted.current) return;
-            el.innerHTML = stringValue;
-            lastEmitted.current = stringValue;
+            // This writes directly into a node React itself renders
+            // (contentEditable), bypassing the virtual DOM on purpose so
+            // typing doesn't fight the caret. That means React never
+            // learns about these children — normally harmless since the
+            // div has no JSX children of its own, but if this instance
+            // is ever reused across two different records in the same
+            // render slot (e.g. switching the selected node without a
+            // remount) the browser's own contentEditable bookkeeping can
+            // end up out of step with React's. Guard the write so any
+            // mismatch surfaces as a no-op rather than crashing the
+            // whole editor.
+            try {
+                el.innerHTML = stringValue;
+                lastEmitted.current = stringValue;
+            } catch {
+                // Swallow — the effect will retry on the next value change.
+            }
         }, [stringValue, mode]);
 
         function handleEditInput(e: React.FormEvent<HTMLDivElement>) {
